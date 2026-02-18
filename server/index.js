@@ -449,6 +449,16 @@ function startEmojiRevealTimer(room) {
 function startSketchGame(room, players) {
   room.game = createSketchState({ players, rng: Math.random });
   broadcastGameState(room);
+  startSketchDrawTimer(room);
+}
+
+function startSketchDrawTimer(room) {
+  stopLoop(room);
+  room.interval = setInterval(() => {
+    room.game = tickSketch(room.game);
+    broadcastGameState(room);
+    if (room.game.timer <= 0) triggerSketchReveal(room);
+  }, 1000);
 }
 
 function triggerSketchReveal(room) {
@@ -468,6 +478,7 @@ function startSketchRevealTimer(room) {
       awardRoundWin(room, room.game.roundWinnerId);
       room.game = nextSketchRound(room.game);
       broadcastGameState(room);
+      startSketchDrawTimer(room);
     }
   }, 1000);
 }

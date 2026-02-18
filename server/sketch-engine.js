@@ -1,3 +1,4 @@
+const DRAW_DURATION = 45;
 const REVEAL_DURATION = 6;
 
 const WORDS = [
@@ -27,7 +28,7 @@ export function createSketchState({ players, rng }) {
     correctGuessers: [],
     scores,
     round: 1,
-    timer: null,
+    timer: DRAW_DURATION,
     wordPool: shuffled,
     roundWinnerId: null,
   };
@@ -115,7 +116,7 @@ export function nextSketchRound(state) {
     guesses: [],
     correctGuessers: [],
     round: state.round + 1,
-    timer: null,
+    timer: DRAW_DURATION,
     roundWinnerId: null,
   };
 }
