@@ -84,11 +84,14 @@ cd ice-breaker-games
 
 ### Step 4: Install Dependencies
 
+Make sure you're inside the project folder from Step 3, then run:
+
 ```bash
+cd ice-breaker-games
 npm install
 ```
 
-This takes about 10–30 seconds. You only need to do this once.
+If you already ran `cd ice-breaker-games` in Step 3, you can skip the `cd` line. This takes about 10–30 seconds. You only need to do this once.
 
 **You're done with setup.** Continue to one of the hosting guides below.
 
