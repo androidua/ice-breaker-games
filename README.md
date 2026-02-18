@@ -252,24 +252,98 @@ Open **http://localhost:5173**. The frontend auto-connects to the game server on
 
 ---
 
-## Game Controls
+## How to Play Each Game
 
-| Game | Controls |
-|------|----------|
-| **Snake Arena** | Arrow keys or WASD to move |
-| **Two Truths & a Lie** | Type statements / Click to vote |
-| **Emoji Storytelling** | Type emojis / Type guesses |
-| **Sketch & Guess** | Draw with mouse or trackpad / Type guesses |
-| **Speed Trivia** | Click an answer option |
+### Snake Arena
 
-**Host controls:**
+**Controls:** Arrow keys or WASD to move.
+
+**How it works:** Each player controls a snake on a shared grid. Your snake moves forward continuously — you can only change direction. Eat the red food pellets to grow longer and score points. If your snake hits a wall, another snake, or its own body, you die.
+
+**Scoring:** +1 point per food pellet eaten.
+
+**Winning a round:** The last snake alive wins the round. If all snakes die simultaneously, the one with the highest score wins.
+
+**Host controls:** After a round ends, the host clicks **Next Round** to start a fresh snake game, or **End Game** to return to voting.
+
+---
+
+### Two Truths & a Lie
+
+**How it works:** Players take turns as the presenter. The presenter writes three statements about themselves — two true and one lie — then marks which one is the lie. They have **60 seconds** to submit. The other players then have **30 seconds** to vote on which statement they think is the lie.
+
+**Scoring:**
+- If you correctly identify the lie → **+1 point** for you
+- If you're fooled (pick a truth) → **+1 point** for the presenter
+
+**Winning a round:** The player who gained the most points in that round (either a clever presenter or a sharp guesser) wins the round.
+
+**Timers:** 60s to write statements, 30s to vote. If the presenter doesn't submit in time, the round is skipped. If voting time runs out, the reveal happens with whatever votes are in. The host can also click **Skip** to force-advance.
+
+---
+
+### Emoji Storytelling
+
+**How it works:** Players take turns as the storyteller. The storyteller is given a movie, event, or phrase and must describe it using **only emojis** — picked from the built-in emoji picker (7 categories: People, Animals, Food, Travel, Nature, Objects, Symbols). Once submitted, all other players type text guesses.
+
+**Scoring:**
+- 1st correct guesser → **4 points**
+- 2nd correct guesser → **3 points**
+- 3rd correct guesser → **2 points**
+- 4th+ correct guesser → **1 point**
+- The storyteller gets **+1 point** for each player who guesses correctly
+
+**Winning a round:** The first player to guess correctly wins the round.
+
+**No timer** during composing or guessing — the storyteller submits when ready, and the round auto-reveals when all players have guessed correctly. The host can click **Skip** to move on early.
+
+---
+
+### Sketch & Guess
+
+**How it works:** Players take turns as the drawer. The drawer sees a secret word and draws it on a canvas using their mouse or trackpad. Color options (black, blue, red) and a clear button are available. Other players see the drawing in real time and type guesses. Guessing happens live while the drawer is still drawing.
+
+**Scoring:** Same as Emoji Storytelling:
+- 1st correct guesser → **4 points**
+- 2nd correct guesser → **3 points**
+- 3rd correct guesser → **2 points**
+- 4th+ correct guesser → **1 point**
+- The drawer gets **+1 point** per correct guesser
+
+**Winning a round:** The first player to guess correctly wins the round.
+
+**Timer:** The drawer has **45 seconds**. When it runs out, the word is revealed and the next round starts. If all guessers get it right early, it reveals immediately. The host can also click **Skip**.
+
+---
+
+### Speed Trivia
+
+**How it works:** Timed multiple-choice questions are shown to all players simultaneously. Each question has 4 options and a **15-second countdown**. Click your answer — the faster you answer correctly, the more points you earn. After each question, the correct answer is highlighted for 5 seconds. A set of 10 questions forms one round. After 10 questions, the round winner is announced and a new set begins.
+
+**Scoring:** Points per correct answer depend on speed:
+- Answer instantly → **up to 1,000 points**
+- Answer at the last second → **100 points** (minimum for a correct answer)
+- Wrong answer → **0 points**
+
+The formula: `points = ceil((time_remaining / 15) × 1000)`, minimum 100.
+
+**Winning a round:** The player with the highest score gained across the 10-question set wins the round.
+
+**No host skip** — trivia is fully automated with its timers.
+
+---
+
+## Host Controls & Leaderboards
+
+**Host controls (available to the room creator):**
 - **Start Games** — begins the first voting round from the lobby
 - **End Game** — ends the current game, awards a game win to the leading player, and returns to voting
 - **Next Round** (Snake only) — starts a new snake round after one ends
+- **Skip** (Truths, Emoji, Sketch) — force-advances a stuck phase
 
-**Leaderboards:**
-- **Rounds Won** — tracked within each game session. Each round has a winner (e.g., last snake alive, first correct guesser, top trivia scorer). Shown in the in-game scoreboard.
-- **Games Won** — tracked across all game sessions. When the host clicks End Game, the player with the most rounds won gets credited with 1 game win. Shown in the lobby and voting screens.
+**Two-tier leaderboard:**
+- **Rounds Won** (shown during each game) — every round has a winner. This tracks how many rounds each player has won within the current game session.
+- **Games Won** (shown in lobby and voting screens) — when the host clicks **End Game**, the player with the most rounds won in that session is credited with **1 game win**. This is the overall score that persists across all games in the session.
 
 ---
 
