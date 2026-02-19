@@ -505,7 +505,6 @@ button:disabled {
 }
 
 .sketch-sidebar {
-  max-height: 520px;
   overflow-y: auto;
   overflow-x: hidden;
 }
