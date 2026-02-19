@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const CANVAS_SIZE = 400;
 const LINE_WIDTH = 3;
-const COLORS = ["#2a2a2a", "#3d5a80", "#c04b3a"];
+const COLORS = ["#2a2a2a", "#3d5a80", "#c04b3a", "#e8b800", "#3a8c4b"];
 
 export default function SketchGame({ game, room, me, send }) {
   const canvasRef = useRef(null);
