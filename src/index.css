@@ -483,11 +483,6 @@ button:disabled {
   gap: 16px;
 }
 
-.sketch-canvas-area {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 
 .sketch-canvas {
   width: 100%;

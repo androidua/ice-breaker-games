@@ -129,58 +129,35 @@ export default function SketchGame({ game, room, me, send }) {
         )}
       </div>
 
-      <div className="sketch-layout">
-        <div className="sketch-canvas-area">
-          {isDrawer && game.status === "drawing" && (
-            <div className="status">Draw: <strong>{game.word}</strong></div>
-          )}
-          {!isDrawer && game.status === "drawing" && (
-            <div className="status">{drawerName} is drawing ({game.wordLength} letters)</div>
-          )}
-          {game.status === "reveal" && (
-            <div className="status">
-              The word was: <strong>{game.word}</strong>
-              {roundWinnerName && <span className="round-winner"> — Round winner: {roundWinnerName}</span>}
-            </div>
-          )}
-
-          <canvas
-            ref={canvasRef}
-            width={CANVAS_SIZE}
-            height={CANVAS_SIZE}
-            className="sketch-canvas"
-            onMouseDown={handlePointerDown}
-            onMouseMove={handlePointerMove}
-            onMouseUp={handlePointerUp}
-            onMouseLeave={handlePointerUp}
-            onTouchStart={handlePointerDown}
-            onTouchMove={handlePointerMove}
-            onTouchEnd={handlePointerUp}
-          />
-
-          {isDrawer && game.status === "drawing" && (
-            <div className="actions sketch-tools">
-              {COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  className={`color-btn ${penColor === c ? "color-active" : ""}`}
-                  style={{ background: c }}
-                  onClick={() => setPenColor(c)}
-                />
-              ))}
-              <button type="button" onClick={handleClear}>Clear</button>
-            </div>
-          )}
-
-          {canSkip && (
-            <div className="actions">
-              <button type="button" className="skip-btn" onClick={() => send({ type: "skipPhase" })}>
-                Skip
-              </button>
-            </div>
-          )}
+      {/* Status line — above the grid, full width */}
+      {isDrawer && game.status === "drawing" && (
+        <div className="status">Draw: <strong>{game.word}</strong></div>
+      )}
+      {!isDrawer && game.status === "drawing" && (
+        <div className="status">{drawerName} is drawing ({game.wordLength} letters)</div>
+      )}
+      {game.status === "reveal" && (
+        <div className="status">
+          The word was: <strong>{game.word}</strong>
+          {roundWinnerName && <span className="round-winner"> — Round winner: {roundWinnerName}</span>}
         </div>
+      )}
+
+      {/* Grid — only canvas + sidebar so both are exactly the same height */}
+      <div className="sketch-layout">
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_SIZE}
+          height={CANVAS_SIZE}
+          className="sketch-canvas"
+          onMouseDown={handlePointerDown}
+          onMouseMove={handlePointerMove}
+          onMouseUp={handlePointerUp}
+          onMouseLeave={handlePointerUp}
+          onTouchStart={handlePointerDown}
+          onTouchMove={handlePointerMove}
+          onTouchEnd={handlePointerUp}
+        />
 
         <div className="panel sketch-sidebar">
           {!isDrawer && game.status === "drawing" && (
@@ -206,6 +183,30 @@ export default function SketchGame({ game, room, me, send }) {
           <Scoreboard game={game} room={room} />
         </div>
       </div>
+
+      {/* Drawing tools — below the grid, aligned under the canvas */}
+      {isDrawer && game.status === "drawing" && (
+        <div className="actions sketch-tools">
+          {COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className={`color-btn ${penColor === c ? "color-active" : ""}`}
+              style={{ background: c }}
+              onClick={() => setPenColor(c)}
+            />
+          ))}
+          <button type="button" onClick={handleClear}>Clear</button>
+        </div>
+      )}
+
+      {canSkip && (
+        <div className="actions">
+          <button type="button" className="skip-btn" onClick={() => send({ type: "skipPhase" })}>
+            Skip
+          </button>
+        </div>
+      )}
     </main>
   );
 }
