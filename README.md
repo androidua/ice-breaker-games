@@ -287,7 +287,7 @@ Open **http://localhost:5173**. The frontend auto-connects to the game server on
 
 ### Emoji Storytelling
 
-**How it works:** Players take turns as the storyteller. The storyteller is given a movie, event, or phrase and must describe it using **only emojis** — picked from the built-in emoji picker (7 categories: People, Animals, Food, Travel, Nature, Objects, Symbols). Once submitted, all other players type text guesses.
+**How it works:** Players take turns as the storyteller. The storyteller is given a movie, TV show, event, or phrase and must describe it using **only emojis** — picked from the built-in emoji picker (8 categories: People, Activities, Animals, Food, Travel, Nature, Objects, Symbols). The picker includes body-part emojis like 🦶👣🦵 so you can represent things like "Cold Feet". Once submitted, all other players type text guesses.
 
 **Scoring:**
 - 1st correct guesser → **4 points**
@@ -298,13 +298,13 @@ Open **http://localhost:5173**. The frontend auto-connects to the game server on
 
 **Winning a round:** The first player to guess correctly wins the round.
 
-**No timer** during composing or guessing — the storyteller submits when ready, and the round auto-reveals when all players have guessed correctly. The host can click **Skip** to move on early.
+**Timer:** The storyteller has **45 seconds** to pick and submit their emojis. If time runs out without a submission, the round is automatically skipped to the next storyteller. Once emojis are submitted, guessing is untimed — the round auto-reveals when all players have guessed correctly. The host can click **Skip** to move on early.
 
 ---
 
 ### Sketch & Guess
 
-**How it works:** Players take turns as the drawer. The drawer sees a secret word and draws it on a canvas using their mouse or trackpad. Color options (black, blue, red) and a clear button are available. Other players see the drawing in real time and type guesses. Guessing happens live while the drawer is still drawing.
+**How it works:** Players take turns as the drawer. The drawer sees a secret word and draws it on a canvas using their mouse or trackpad. Color options (black, blue, red, yellow, green) and a clear button are available. Other players see the drawing in real time and type guesses. Guessing happens live while the drawer is still drawing.
 
 **Scoring:** Same as Emoji Storytelling:
 - 1st correct guesser → **4 points**
