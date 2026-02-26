@@ -204,7 +204,9 @@ cd ice-breaker-games
 npm start
 ```
 
-### 2. Find your local IP address
+### 2. Find the link to share
+
+Open a **new terminal** and run:
 
 **macOS:**
 ```bash
@@ -216,17 +218,17 @@ ipconfig getifaddr en0
 ipconfig | findstr /i "IPv4"
 ```
 
-This gives you something like `192.168.1.42`.
+This prints your local IP — something like `192.168.1.42`.
 
-### 3. Everyone opens the game
-
-Tell your friends to open their browser and go to:
-
+**The link you share with friends is:**
 ```
 http://192.168.1.42:3000
 ```
+(swap in your actual IP)
 
-(Replace with your actual IP.)
+### 3. Everyone opens that link
+
+Friends open the link in their browser — no install needed. You open the same link too (don't use `localhost`, use the IP so everyone is on the same connection).
 
 ### 4. Host and play
 
