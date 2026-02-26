@@ -1,6 +1,65 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export default function SnakeGame({ game, room, me, send }) {
+  const boardRef = useRef(null);
+  const touchStartRef = useRef(null);
+  // sendRef keeps the event handler from ever going stale without re-attaching
+  const sendRef = useRef(send);
+  sendRef.current = send;
+  const [showSwipeHint, setShowSwipeHint] = useState(false);
+
+  // Board-scoped swipe controls — { passive: false } is required so
+  // preventDefault() actually blocks pull-to-refresh and back-swipe on iOS/Android.
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+
+    const onTouchStart = (e) => {
+      if (e.touches.length !== 1) return;
+      e.preventDefault();
+      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    };
+
+    const onTouchMove = (e) => {
+      e.preventDefault();
+    };
+
+    const onTouchEnd = (e) => {
+      if (!touchStartRef.current || e.changedTouches.length !== 1) return;
+      const dx = e.changedTouches[0].clientX - touchStartRef.current.x;
+      const dy = e.changedTouches[0].clientY - touchStartRef.current.y;
+      touchStartRef.current = null;
+
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+      if (Math.max(absDx, absDy) < 20) return; // ignore taps / micro-drags
+
+      const dir = absDx > absDy
+        ? (dx > 0 ? "RIGHT" : "LEFT")
+        : (dy > 0 ? "DOWN" : "UP");
+
+      sendRef.current({ type: "input", dir });
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd, { passive: false });
+
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+    };
+  }, []); // attach once — sendRef.current is always fresh
+
+  // Show "Swipe to move" hint when game starts on a touch device
+  useEffect(() => {
+    const isTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    if (game?.status === "running" && isTouch) {
+      setShowSwipeHint(true);
+    }
+  }, [game?.status]);
+
   const snakeCells = useMemo(() => {
     const map = new Map();
     if (!game?.snakes) return map;
@@ -47,8 +106,19 @@ export default function SnakeGame({ game, room, me, send }) {
   return (
     <>
       <main className="stage">
-        <div className="board" style={{ gridTemplateColumns: `repeat(${game?.cols || 20}, 1fr)` }}>
-          {boardCells}
+        <div className="board-wrapper">
+          <div
+            ref={boardRef}
+            className="board"
+            style={{ gridTemplateColumns: `repeat(${game?.cols || 20}, 1fr)` }}
+          >
+            {boardCells}
+          </div>
+          {showSwipeHint && (
+            <div className="swipe-hint" onAnimationEnd={() => setShowSwipeHint(false)}>
+              Swipe to move
+            </div>
+          )}
         </div>
         <div className="panel">
           <div className="status" aria-live="polite">{statusLabel}</div>
