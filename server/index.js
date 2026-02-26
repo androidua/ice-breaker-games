@@ -12,10 +12,19 @@ import { createTriviaState, handleTriviaAction, allAnswered, revealTrivia, nextT
 
 const PORT = Number(process.env.PORT || process.env.SNAKE_WS_PORT || 3000);
 const SNAKE_TICK_MS = 120;
-const ROWS = 25;
-const COLS = 25;
-const MAX_PLAYERS = 6;
-const COLORS = ["#2a2a2a", "#3d5a80", "#8d5a3a", "#5a7d3a", "#7a3d80", "#3a7d7d"];
+const ROWS = 30;
+const COLS = 30;
+const MAX_PLAYERS = 8;
+const COLORS = [
+  "#2a2a2a", // dark charcoal
+  "#3d5a80", // steel blue
+  "#8d5a3a", // warm brown
+  "#5a7d3a", // olive green
+  "#7a3d80", // purple
+  "#3a7d7d", // teal
+  "#c07a30", // amber orange  (player 7)
+  "#b03060", // magenta       (player 8)
+];
 
 // ── Static file server ───────────────────────────────────────────
 

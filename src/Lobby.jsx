@@ -15,7 +15,7 @@ export default function Lobby({ connection, error, send }) {
   return (
     <main className="lobby">
       <div className="panel">
-        <div className="status">Multiplayer party games for up to 6 players.</div>
+        <div className="status">Multiplayer party games for up to 8 players.</div>
         <label className="field">
           <span>Name</span>
           <input

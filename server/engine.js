@@ -9,12 +9,14 @@ export const DIRECTION_KEYS = Object.keys(DIRECTIONS);
 
 export function createGameState({ rows, cols, players, rng }) {
   const spawnPoints = [
-    { x: 2, y: 2, dir: DIRECTIONS.RIGHT },
-    { x: cols - 3, y: 2, dir: DIRECTIONS.LEFT },
-    { x: 2, y: rows - 3, dir: DIRECTIONS.RIGHT },
-    { x: cols - 3, y: rows - 3, dir: DIRECTIONS.LEFT },
-    { x: Math.floor(cols / 2), y: 2, dir: DIRECTIONS.DOWN },
-    { x: Math.floor(cols / 2), y: rows - 3, dir: DIRECTIONS.UP },
+    { x: 2,            y: 2,                        dir: DIRECTIONS.RIGHT }, // top-left
+    { x: cols - 3,     y: 2,                        dir: DIRECTIONS.LEFT  }, // top-right
+    { x: 2,            y: rows - 3,                 dir: DIRECTIONS.RIGHT }, // bottom-left
+    { x: cols - 3,     y: rows - 3,                 dir: DIRECTIONS.LEFT  }, // bottom-right
+    { x: Math.floor(cols / 2), y: 2,                dir: DIRECTIONS.DOWN  }, // top-centre
+    { x: Math.floor(cols / 2), y: rows - 3,         dir: DIRECTIONS.UP    }, // bottom-centre
+    { x: 2,            y: Math.floor(rows / 2),     dir: DIRECTIONS.RIGHT }, // left-middle  (player 7)
+    { x: cols - 3,     y: Math.floor(rows / 2),     dir: DIRECTIONS.LEFT  }, // right-middle (player 8)
   ];
 
   const snakes = new Map();

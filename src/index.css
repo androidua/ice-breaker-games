@@ -619,6 +619,12 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  /* 30×30 grid: tighten gap and padding so cells stay ~11px on a typical phone */
+  .board {
+    gap: 1px;
+    padding: 6px;
+  }
+
   /* D-pad: large, easy-to-tap buttons for thumbs */
   .controls {
     margin-top: 8px;

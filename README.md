@@ -1,6 +1,6 @@
 # Game Arena — Multiplayer Party Games
 
-A collection of real-time multiplayer icebreaker games for up to 6 players. Host a room, share a link, vote on which game to play, and compete!
+A collection of real-time multiplayer icebreaker games for up to 8 players. Host a room, share a link, vote on which game to play, and compete!
 
 **Works on mobile** — players can join from phones or tablets. Snake supports swipe-to-move and on-screen arrow buttons. Sketch & Guess supports finger drawing. All other games are tap-friendly with large touch targets.
 
@@ -166,7 +166,7 @@ https://some-random-words.trycloudflare.com
 5. Enter your name and click **Host Room**
 6. You'll see a 4-character room code like `AB12`
 7. **Tell your friends the room code** — they enter it and click **Join Room**
-8. Once everyone's in (up to 6 players), click **Start Games**
+8. Once everyone's in (up to 8 players), click **Start Games**
 9. Everyone votes on which game to play (30-second timer). The most-voted game starts automatically.
 10. The host clicks **End Game** when ready to move on — voting starts again for the next game.
 
@@ -267,7 +267,7 @@ Open **http://localhost:5173**. The frontend auto-connects to the game server on
 - **Desktop:** Arrow keys or WASD
 - **Mobile:** Swipe on the board in any direction, or tap the on-screen arrow buttons
 
-**How it works:** Each player controls a snake on a shared 25×25 grid. Your snake moves forward continuously — you can only change direction. Eat the red food pellets to grow longer and score points. If your snake hits a wall, another snake, or its own body, you die. Solo play is fully supported — the game only ends when your snake actually dies, not when you're the last one left.
+**How it works:** Each player controls a snake on a shared 30×30 grid. Your snake moves forward continuously — you can only change direction. Eat the red food pellets to grow longer and score points. If your snake hits a wall, another snake, or its own body, you die. Solo play is fully supported — the game only ends when your snake actually dies, not when you're the last one left.
 
 **Scoring:** +1 point per food pellet eaten.
 
