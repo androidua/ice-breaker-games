@@ -239,7 +239,7 @@ export function nextTriviaQuestion(state) {
       ...state,
       status: "round_complete",
       roundWinnerId: winnerId,
-      timer: ROUND_COMPLETE_DURATION,
+      timer: null,  // Host must press "Start Next Set" — no auto-advance
     };
   }
 

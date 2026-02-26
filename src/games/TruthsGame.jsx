@@ -1,4 +1,20 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+
+// Deterministic shuffle: same player + same round always gives same order.
+// This lets each player see statements in a unique order without needing server changes.
+function seededShuffle(arr, seedStr) {
+  let h = 0;
+  for (let i = 0; i < seedStr.length; i++) {
+    h = (Math.imul(31, h) + seedStr.charCodeAt(i)) | 0;
+  }
+  const result = [...arr];
+  for (let i = result.length - 1; i > 0; i--) {
+    h = ((Math.imul(h, 1664525) + 1013904223) | 0) >>> 0;
+    const j = h % (i + 1);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
 
 export default function TruthsGame({ game, room, me, send }) {
   const [statements, setStatements] = useState(["", "", ""]);
@@ -21,8 +37,17 @@ export default function TruthsGame({ game, room, me, send }) {
     });
   };
 
-  const handleVote = (index) => {
-    send({ type: "gameAction", action: { kind: "vote", index } });
+  // Each player sees statements in their own unique order.
+  // displayOrder is e.g. [2, 0, 1] meaning: display slot 0 shows original[2], etc.
+  const displayOrder = useMemo(
+    () => seededShuffle([0, 1, 2], me.id + String(game.round)),
+    [me.id, game.round]
+  );
+
+  // Map a display-position vote back to the original index before sending to server.
+  const handleVote = (displayIdx) => {
+    const originalIdx = displayOrder[displayIdx];
+    send({ type: "gameAction", action: { kind: "vote", index: originalIdx } });
   };
 
   const canSkip = isHost && (game.status === "submitting" || game.status === "voting");
@@ -84,15 +109,15 @@ export default function TruthsGame({ game, room, me, send }) {
               : `Which statement by ${presenterName} is the lie?`}
           </div>
           <div className="truths-cards">
-            {game.statements.map((text, i) => (
+            {displayOrder.map((origIdx, displayIdx) => (
               <button
-                key={i}
+                key={displayIdx}
                 type="button"
                 className="truth-card"
-                onClick={() => !isPresenter && handleVote(i)}
+                onClick={() => !isPresenter && handleVote(displayIdx)}
                 disabled={isPresenter}
               >
-                {text}
+                {game.statements[origIdx]}
               </button>
             ))}
           </div>
@@ -104,13 +129,13 @@ export default function TruthsGame({ game, room, me, send }) {
         <div className="panel truths-panel">
           <div className="status">The lie was revealed!</div>
           <div className="truths-cards">
-            {game.statements.map((text, i) => (
+            {displayOrder.map((origIdx, displayIdx) => (
               <div
-                key={i}
-                className={`truth-card ${i === game.lieIndex ? "truth-lie" : "truth-true"}`}
+                key={displayIdx}
+                className={`truth-card ${origIdx === game.lieIndex ? "truth-lie" : "truth-true"}`}
               >
-                <span>{text}</span>
-                <span className="truth-label">{i === game.lieIndex ? "LIE" : "TRUTH"}</span>
+                <span>{game.statements[origIdx]}</span>
+                <span className="truth-label">{origIdx === game.lieIndex ? "LIE" : "TRUTH"}</span>
               </div>
             ))}
           </div>

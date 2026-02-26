@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 export default function TriviaGame({ game, room, me, send }) {
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const lastQuestionRef = useRef(null);
+  const isHost = room?.hostId === me.id;
 
   useEffect(() => {
     if (game && game.questionIndex !== lastQuestionRef.current) {
@@ -34,18 +35,31 @@ export default function TriviaGame({ game, room, me, send }) {
             ? `Set ${game.triviaRound || 1} Complete`
             : `Q${game.questionIndex + 1}/${game.totalQuestions} (Set ${game.triviaRound || 1})`}
         </span>
-        <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+        {game.timer != null && (
+          <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+        )}
       </div>
 
       {game.status === "round_complete" ? (
         <div className="panel trivia-panel">
           <div className="trivia-question">
-            Set of {game.totalQuestions} questions complete!
+            Set {game.triviaRound} complete — {game.totalQuestions} questions done!
           </div>
           {roundWinnerName && (
             <div className="status round-winner">Round winner: {roundWinnerName}</div>
           )}
-          <div className="status">Next set starting soon...</div>
+          {isHost ? (
+            <div className="actions">
+              <button
+                type="button"
+                onClick={() => send({ type: "gameAction", action: { kind: "nextSet" } })}
+              >
+                Start Next Set
+              </button>
+            </div>
+          ) : (
+            <div className="status">Waiting for host to start the next set...</div>
+          )}
         </div>
       ) : (
         <div className="panel trivia-panel">

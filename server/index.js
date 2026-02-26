@@ -345,6 +345,13 @@ function handleGameAction(ws, clientId, action) {
       }
       break;
     case "trivia":
+      // Host starts the next set after round_complete
+      if (action.kind === "nextSet" && clientId === room.hostId && room.game.status === "round_complete") {
+        room.game = nextTriviaRound(room.game, Math.random);
+        broadcastGameState(room);
+        startTriviaTick(room);
+        break;
+      }
       room.game = handleTriviaAction(room.game, clientId, action);
       if (allAnswered(room.game)) {
         handleTriviaReveal(room);
@@ -559,17 +566,13 @@ function handleTriviaTimerEnd(room) {
   } else if (room.game.status === "reveal") {
     room.game = nextTriviaQuestion(room.game);
     if (room.game.status === "round_complete") {
+      // Award win and stop — host must press "Start Next Set" to continue.
       awardRoundWin(room, room.game.roundWinnerId);
       broadcastGameState(room);
-      startTriviaTick(room);
     } else {
       broadcastGameState(room);
       startTriviaTick(room);
     }
-  } else if (room.game.status === "round_complete") {
-    room.game = nextTriviaRound(room.game, Math.random);
-    broadcastGameState(room);
-    startTriviaTick(room);
   }
 }
 
