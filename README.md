@@ -270,7 +270,7 @@ Open **http://localhost:5173**. The frontend auto-connects to the game server on
 
 **Controls:** Arrow keys or WASD to move.
 
-**How it works:** Each player controls a snake on a shared grid. Your snake moves forward continuously — you can only change direction. Eat the red food pellets to grow longer and score points. If your snake hits a wall, another snake, or its own body, you die.
+**How it works:** Each player controls a snake on a shared 25×25 grid. Your snake moves forward continuously — you can only change direction. Eat the red food pellets to grow longer and score points. If your snake hits a wall, another snake, or its own body, you die. Solo play is fully supported — the game only ends when your snake actually dies, not when you're the last one left.
 
 **Scoring:** +1 point per food pellet eaten.
 
