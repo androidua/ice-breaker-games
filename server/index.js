@@ -68,7 +68,25 @@ let nextClientId = 1;
 
 const wss = new WebSocketServer({ server: httpServer });
 
+// Send a WebSocket ping to every connected client every 25 seconds.
+// This prevents Cloudflare Tunnel (and other proxies) from treating the
+// connection as idle and silently closing it. If a client doesn't respond
+// with a pong within one interval, it is terminated and cleaned up.
+setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) {
+      ws.terminate();
+      return;
+    }
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 25000);
+
 wss.on("connection", (ws) => {
+  ws.isAlive = true;
+  ws.on("pong", () => { ws.isAlive = true; });
+
   const clientId = `p${nextClientId++}`;
   ws.send(JSON.stringify({ type: "welcome", id: clientId }));
 

@@ -104,6 +104,13 @@ export default function App() {
         <div className="score">{room ? `Room ${room.code}` : ""}</div>
       </header>
 
+      {/* Shown when the WebSocket drops mid-game (e.g. tunnel timeout) */}
+      {(connection === "closed" || connection === "error") && room && (
+        <div className="disconnected-banner">
+          Connection lost — please refresh the page to rejoin.
+        </div>
+      )}
+
       {!room && <Lobby connection={connection} error={error} send={send} />}
 
       {room && room.status === "lobby" && (

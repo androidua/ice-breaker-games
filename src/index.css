@@ -227,6 +227,15 @@ button:disabled {
   gap: 12px;
 }
 
+.disconnected-banner {
+  padding: 10px 16px;
+  background: #c04b3a;
+  color: #fff;
+  font-size: 13px;
+  text-align: center;
+  letter-spacing: 0.06em;
+}
+
 .end-game-btn {
   font-size: 11px;
   padding: 4px 8px;
