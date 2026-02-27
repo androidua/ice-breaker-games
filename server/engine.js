@@ -192,7 +192,8 @@ export function setSnakeDirection(state, playerId, dir) {
 export function spawnFood(snakes, rows, cols, rng) {
   const occupied = new Set();
   snakes.forEach((snake) => {
-    if (!snake.alive) return;
+    // Include dead snake bodies: they stay rendered on the board, so food
+    // must not spawn under them or it becomes invisible behind their colour.
     snake.body.forEach((segment) => occupied.add(keyOf(segment)));
   });
 
