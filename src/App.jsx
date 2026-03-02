@@ -99,7 +99,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="title">
-          {room?.status === "playing" && gameLabel ? gameLabel : "Game Arena"}
+          {room?.status === "playing" && gameLabel ? gameLabel : "Huddle Play Room"}
         </div>
         <div className="score">{room ? `Room ${room.code}` : ""}</div>
       </header>
@@ -157,7 +157,7 @@ export default function App() {
         <div>
           {room?.currentGame === "snake"
             ? "WASD / Arrows to move"
-            : "Game Arena — Multiplayer Party Games"}
+            : "Huddle Play Room — Multiplayer Party Games"}
         </div>
         <div className="credit">
           A personal project by{" "}

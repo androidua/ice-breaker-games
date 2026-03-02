@@ -1,4 +1,4 @@
-# Game Arena — Multiplayer Party Games
+# Huddle Play Room — Multiplayer Party Games
 
 A collection of real-time multiplayer icebreaker games for up to 8 players. Host a room, share a link, vote on which game to play, and compete!
 
