@@ -11,7 +11,7 @@ import { createSketchState, handleSketchAction, allSketchGuessersCorrect, tickSk
 import { createTriviaState, handleTriviaAction, allAnswered, revealTrivia, nextTriviaQuestion, nextTriviaRound, tickTrivia, serializeTrivia } from "./trivia-engine.js";
 
 const PORT = Number(process.env.PORT || process.env.SNAKE_WS_PORT || 3000);
-const SNAKE_TICK_MS = 120;
+const SNAKE_TICK_MS = 100;
 const ROWS = 30;
 const COLS = 30;
 const MAX_PLAYERS = 8;
@@ -417,11 +417,12 @@ function serializeSnake(game) {
   if (!game) return null;
   return {
     gameType: "snake",
-    rows: game.rows, cols: game.cols, food: game.food,
+    rows: game.rows, cols: game.cols, food: game.food ? [game.food.x, game.food.y] : null,
     status: game.status, winnerId: game.winnerId,
     snakes: Array.from(game.snakes.values()).map((snake) => ({
       id: snake.id, name: snake.name, color: snake.color,
-      alive: snake.alive, score: snake.score, body: snake.body,
+      alive: snake.alive, score: snake.score,
+      body: snake.body.map(({ x, y }) => [x, y]),
     })),
   };
 }

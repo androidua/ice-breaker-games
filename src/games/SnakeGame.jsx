@@ -22,23 +22,19 @@ export default function SnakeGame({ game, room, me, send }) {
 
     const onTouchMove = (e) => {
       e.preventDefault();
-    };
-
-    const onTouchEnd = (e) => {
-      if (!touchStartRef.current || e.changedTouches.length !== 1) return;
-      const dx = e.changedTouches[0].clientX - touchStartRef.current.x;
-      const dy = e.changedTouches[0].clientY - touchStartRef.current.y;
-      touchStartRef.current = null;
-
+      if (!touchStartRef.current || e.touches.length !== 1) return;
+      const dx = e.touches[0].clientX - touchStartRef.current.x;
+      const dy = e.touches[0].clientY - touchStartRef.current.y;
       const absDx = Math.abs(dx);
       const absDy = Math.abs(dy);
-      if (Math.max(absDx, absDy) < 20) return; // ignore taps / micro-drags
-
-      const dir = absDx > absDy
-        ? (dx > 0 ? "RIGHT" : "LEFT")
-        : (dy > 0 ? "DOWN" : "UP");
-
+      if (Math.max(absDx, absDy) < 20) return;
+      const dir = absDx > absDy ? (dx > 0 ? "RIGHT" : "LEFT") : (dy > 0 ? "DOWN" : "UP");
+      touchStartRef.current = null; // consume gesture — prevents re-fire on touchend
       sendRef.current({ type: "input", dir });
+    };
+
+    const onTouchEnd = () => {
+      touchStartRef.current = null; // cleanup if threshold was never reached
     };
 
     el.addEventListener("touchstart", onTouchStart, { passive: false });
@@ -64,8 +60,8 @@ export default function SnakeGame({ game, room, me, send }) {
     const map = new Map();
     if (!game?.snakes) return map;
     game.snakes.forEach((snake) => {
-      snake.body.forEach((segment, index) => {
-        const key = `${segment.x},${segment.y}`;
+      snake.body.forEach(([x, y], index) => {
+        const key = `${x},${y}`;
         map.set(key, { color: snake.color, head: index === 0, alive: snake.alive });
       });
     });
@@ -87,7 +83,7 @@ export default function SnakeGame({ game, room, me, send }) {
           if (!sc.alive) className += " dead";
           style = { background: sc.color };
         }
-        if (game.food && key === `${game.food.x},${game.food.y}`) className += " food";
+        if (game.food && key === `${game.food[0]},${game.food[1]}`) className += " food";
         cells.push(<div key={key} className={className} style={style} />);
       }
     }

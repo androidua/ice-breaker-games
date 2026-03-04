@@ -110,23 +110,24 @@ export function stepGame(state, rng) {
     if (headCounts.get(keyOf(head)) > 1) deaths.add(snake.id);
   });
 
-  next.forEach((snake) => {
-    if (!snake.alive) return;
-    const head = nextHeads.get(snake.id);
-    const selfBody = nextBodies.get(snake.id).slice(1);
-    if (selfBody.some((segment) => segment.x === head.x && segment.y === head.y)) {
-      deaths.add(snake.id);
-    }
+  // Build position sets for O(1) collision lookups
+  const tailSets = new Map();
+  const fullBodySets = new Map();
+  nextBodies.forEach((body, id) => {
+    const tail = new Set();
+    body.slice(1).forEach((seg) => tail.add(keyOf(seg)));
+    tailSets.set(id, tail);
+    const full = new Set();
+    body.forEach((seg) => full.add(keyOf(seg)));
+    fullBodySets.set(id, full);
   });
 
   next.forEach((snake, id) => {
     if (!snake.alive) return;
-    const head = nextHeads.get(id);
-    nextBodies.forEach((body, otherId) => {
-      if (id === otherId) return;
-      if (body.some((segment) => segment.x === head.x && segment.y === head.y)) {
-        deaths.add(id);
-      }
+    const headKey = keyOf(nextHeads.get(id));
+    if (tailSets.get(id)?.has(headKey)) deaths.add(id);
+    fullBodySets.forEach((bodySet, otherId) => {
+      if (otherId !== id && bodySet.has(headKey)) deaths.add(id);
     });
   });
 
