@@ -98,10 +98,18 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="title">
-          {room?.status === "playing" && gameLabel ? gameLabel : "Huddle Play Room"}
+        <div></div>
+        <div className="topbar-center">
+          <div className="topbar-brand">
+            <svg width="32" height="32" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+              <path d="M128 40 L204 84 L204 172 L128 216 L52 172 L52 84 Z" fill="none" stroke="#2a2a2a" strokeWidth="10"/>
+              <path d="M128 40 L128 100 M128 100 L170 120 M128 100 L86 120 M128 150 L128 216 M128 150 L170 170 M128 150 L86 170" fill="none" stroke="#2a2a2a" strokeWidth="7" strokeLinecap="round"/>
+            </svg>
+            <span className="brand-name">Huddle Play Room</span>
+          </div>
+          {!room && <div className="brand-subtitle">Multiplayer party games · up to 8 players</div>}
         </div>
-        <div className="score">{room ? `Room ${room.code}` : ""}</div>
+        <div className="topbar-right">{room ? `Room ${room.code}` : ""}</div>
       </header>
 
       {/* Shown when the WebSocket drops mid-game (e.g. tunnel timeout) */}
@@ -149,17 +157,14 @@ export default function App() {
       )}
 
       <footer className="footer">
-        {room && isHost && room.status === "playing" && (
-          <button type="button" className="end-game-btn" onClick={() => send({ type: "endGame" })}>
-            End Game
-          </button>
-        )}
-        <div>
-          {room?.currentGame === "snake"
-            ? "WASD / Arrows to move"
-            : "Huddle Play Room — Multiplayer Party Games"}
+        <div className="footer-left">
+          {room && isHost && room.status === "playing" && (
+            <button type="button" className="end-game-btn" onClick={() => send({ type: "endGame" })}>
+              End Game
+            </button>
+          )}
         </div>
-        <div className="credit">
+        <div className="footer-center">
           A personal project by{" "}
           <a
             href="https://github.com/androidua/ice-breaker-games"
@@ -170,6 +175,9 @@ export default function App() {
             Dmytro B.
           </a>
           , built with Claude AI &amp; Cursor
+        </div>
+        <div className="footer-right">
+          {room?.currentGame === "snake" ? "WASD / Arrows to move" : ""}
         </div>
       </footer>
     </div>

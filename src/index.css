@@ -34,20 +34,49 @@ body {
 }
 
 .topbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 4px 0 12px;
+  border-bottom: 1px solid #d4c9b6;
+}
+
+.topbar-center {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
 
-.title {
-  font-size: 24px;
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-name {
+  font-size: 18px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
 }
 
-.score {
-  font-size: 16px;
+.brand-subtitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  opacity: 0.45;
+  white-space: nowrap;
+}
+
+.topbar-right {
+  display: flex;
+  justify-content: flex-end;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 
 .stage {
@@ -219,31 +248,44 @@ button:disabled {
 }
 
 .footer {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid #d4c9b6;
 }
 
-.credit {
-  margin-left: auto;
+.footer-left {
+  display: flex;
+  align-items: center;
+}
+
+.footer-center {
   font-size: 10px;
-  opacity: 0.5;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
+  opacity: 0.5;
+  white-space: nowrap;
+}
+
+.footer-right {
+  display: flex;
+  justify-content: flex-end;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  opacity: 0.5;
 }
 
 .credit-link {
   color: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
+  opacity: 1;
 }
 
 .credit-link:hover {
-  opacity: 0.8;
+  opacity: 0.7;
 }
 
 .disconnected-banner {

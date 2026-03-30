@@ -29,7 +29,6 @@ export default function TriviaGame({ game, room, me, send }) {
   return (
     <main className="game-stage">
       <div className="game-header">
-        <span>Speed Trivia</span>
         <span>
           {game.status === "round_complete"
             ? `Set ${game.triviaRound || 1} Complete`

@@ -122,7 +122,6 @@ export default function SketchGame({ game, room, me, send }) {
   return (
     <main className="game-stage">
       <div className="game-header">
-        <span>Sketch & Guess</span>
         <span>Round {game.round}</span>
         {game.timer != null && (
           <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
