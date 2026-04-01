@@ -6,9 +6,12 @@ import { WebSocketServer } from "ws";
 import { createGameState, setSnakeDirection, stepGame } from "./engine.js";
 import { createVotingState, submitVote, tickVoting, allVotesIn, resolveVoting, serializeVoting } from "./voting-engine.js";
 import { createTruthsState, handleTruthsAction, allTruthsVotesIn, revealTruths, nextTruthsRound, tickTruths, serializeTruths } from "./truths-engine.js";
-import { createEmojiState, handleEmojiAction, allEmojiGuessersCorrect, tickEmoji, revealEmoji, nextEmojiRound, serializeEmoji } from "./emoji-engine.js";
+import { createEmojiState, handleEmojiAction, allEmojiGuessersCorrect, allEmojiGuessersExhausted, tickEmoji, revealEmoji, nextEmojiRound, serializeEmoji } from "./emoji-engine.js";
 import { createSketchState, handleSketchAction, allSketchGuessersCorrect, tickSketch, revealSketch, nextSketchRound, serializeSketch } from "./sketch-engine.js";
 import { createTriviaState, handleTriviaAction, allAnswered, revealTrivia, nextTriviaQuestion, nextTriviaRound, tickTrivia, serializeTrivia } from "./trivia-engine.js";
+import { createTyperacerState, handleTyperacerAction, allTyperacerFinished, revealTyperacer, nextTyperacerRound, tickTyperacer, serializeTyperacer } from "./typeracer-engine.js";
+import { createWordChainState, handleWordChainAction, eliminateCurrentPlayer, nextWordChainRound, tickWordChain, serializeWordChain } from "./wordchain-engine.js";
+import { createBomberState, handleBomberAction, stepBomber, tickBomberTimer, nextBomberRound, serializeBomber, TICK_MS as BOMBER_TICK_MS } from "./bomber-engine.js";
 
 const PORT = Number(process.env.PORT || process.env.SNAKE_WS_PORT || 3000);
 const SNAKE_TICK_MS = 120;
@@ -115,6 +118,7 @@ function handleMessage(ws, clientId, message) {
     case "endGame":    handleEndGame(clientId); break;
     case "skipPhase":  handleSkipPhase(clientId); break;
     case "input":      handleInput(clientId, message.dir); break;
+    case "stopInput":  handleStopInput(clientId); break;
     case "vote":       handleVote(clientId, message.game); break;
     case "gameAction": handleGameAction(ws, clientId, message.action); break;
     default:
@@ -233,6 +237,25 @@ function handleSkipPhase(clientId) {
         triggerSketchReveal(room);
       }
       break;
+    case "typeracer":
+      if (room.game.status === "racing") {
+        triggerTyperacerReveal(room);
+      }
+      break;
+    case "wordchain":
+      if (room.game.status === "round_end") {
+        stopLoop(room);
+        awardRoundWin(room, room.game.roundWinnerId);
+        room.game = nextWordChainRound(room.game, Math.random);
+        broadcastGameState(room);
+        startWordChainTick(room);
+      }
+      break;
+    case "bomber":
+      if (room.game.status === "round_end") {
+        startNextBomberRound(room);
+      }
+      break;
   }
 }
 
@@ -326,11 +349,14 @@ function startSelectedGame(room, gameName) {
   const players = Array.from(room.players.values());
 
   switch (gameName) {
-    case "snake":  startSnake(room, players); break;
-    case "truths": startTruths(room, players); break;
-    case "emoji":  startEmojiGame(room, players); break;
-    case "sketch": startSketchGame(room, players); break;
-    case "trivia": startTriviaGame(room, players); break;
+    case "snake":     startSnake(room, players); break;
+    case "truths":    startTruths(room, players); break;
+    case "emoji":     startEmojiGame(room, players); break;
+    case "sketch":    startSketchGame(room, players); break;
+    case "trivia":    startTriviaGame(room, players); break;
+    case "typeracer":  startTyperacerGame(room, players); break;
+    case "wordchain":  startWordChainGame(room, players); break;
+    case "bomber":     startBomberGame(room, players); break;
   }
 
   sendRoomUpdate(room);
@@ -356,7 +382,7 @@ function handleGameAction(ws, clientId, action) {
       if (prevEmojiStatus === "composing" && room.game.status === "guessing") {
         stopLoop(room);
       }
-      if (room.game.status === "guessing" && allEmojiGuessersCorrect(room.game)) {
+      if (room.game.status === "guessing" && (allEmojiGuessersCorrect(room.game) || allEmojiGuessersExhausted(room.game))) {
         triggerEmojiReveal(room);
       } else {
         broadcastGameState(room);
@@ -386,13 +412,42 @@ function handleGameAction(ws, clientId, action) {
         broadcastGameState(room);
       }
       break;
+    case "typeracer":
+      room.game = handleTyperacerAction(room.game, clientId, action);
+      if (room.game.status === "racing" && allTyperacerFinished(room.game)) {
+        triggerTyperacerReveal(room);
+      } else {
+        broadcastGameState(room);
+      }
+      break;
+    case "wordchain":
+      room.game = handleWordChainAction(room.game, clientId, action);
+      broadcastGameState(room);
+      break;
+    case "bomber":
+      room.game = handleBomberAction(room.game, clientId, action);
+      // No broadcast here — state is broadcast on every tick
+      break;
   }
 }
 
 function handleInput(clientId, dir) {
   const room = findRoomByPlayer(clientId);
-  if (!room || room.status !== "playing" || room.currentGame !== "snake") return;
+  if (!room || room.status !== "playing") return;
+  if (room.currentGame === "bomber") {
+    room.game = handleBomberAction(room.game, clientId, { kind: "move", dir });
+    return;
+  }
+  if (room.currentGame !== "snake") return;
   room.game = setSnakeDirection(room.game, clientId, dir);
+}
+
+function handleStopInput(clientId) {
+  const room = findRoomByPlayer(clientId);
+  if (!room || room.status !== "playing") return;
+  if (room.currentGame === "bomber") {
+    room.game = handleBomberAction(room.game, clientId, { kind: "stop" });
+  }
 }
 
 // ── Snake ────────────────────────────────────────────────────────
@@ -486,17 +541,14 @@ function startEmojiGame(room, players) {
 }
 
 // 45-second countdown for the storyteller to pick their emojis.
-// If time runs out before submission, the round is skipped.
+// If time runs out before submission, go straight to reveal so the round resolves gracefully.
 function startEmojiComposeTimer(room) {
   stopLoop(room);
   room.interval = setInterval(() => {
     room.game = tickEmoji(room.game);
     broadcastGameState(room);
     if (room.game.status === "composing" && room.game.timer <= 0) {
-      stopLoop(room);
-      room.game = nextEmojiRound(room.game, Math.random);
-      broadcastGameState(room);
-      startEmojiComposeTimer(room);
+      triggerEmojiReveal(room);
     }
   }, 1000);
 }
@@ -613,6 +665,117 @@ function startTriviaTick(room) {
   }, 1000);
 }
 
+// ── Typeracer ────────────────────────────────────────────────────
+
+function startTyperacerGame(room, players) {
+  room.game = createTyperacerState({ players, rng: Math.random });
+  broadcastGameState(room);
+  startTyperacerTick(room);
+}
+
+function startTyperacerTick(room) {
+  stopLoop(room);
+  room.interval = setInterval(() => {
+    room.game = tickTyperacer(room.game);
+    broadcastGameState(room);
+    if (room.game.status === "racing" && room.game.timer <= 0) {
+      triggerTyperacerReveal(room);
+    } else if (room.game.status === "reveal" && room.game.timer <= 0) {
+      stopLoop(room);
+      awardRoundWin(room, room.game.roundWinnerId);
+      room.game = nextTyperacerRound(room.game, Math.random);
+      broadcastGameState(room);
+      startTyperacerTick(room);
+    }
+  }, 1000);
+}
+
+function triggerTyperacerReveal(room) {
+  stopLoop(room);
+  room.game = revealTyperacer(room.game);
+  broadcastGameState(room);
+  startTyperacerTick(room);
+}
+
+// ── Bomberman Arena ──────────────────────────────────────────────
+
+function startBomberGame(room, players) {
+  room.game = createBomberState({ players, rng: Math.random });
+  broadcastGameState(room);
+  startBomberLoop(room);
+}
+
+function startBomberLoop(room) {
+  stopLoop(room);
+  let secAccum = 0;
+  room.interval = setInterval(() => {
+    if (!room.game || room.game.status !== "playing") return;
+
+    room.game = stepBomber(room.game, Math.random);
+    broadcastGameState(room);
+
+    // Tick 1-second timer separately
+    secAccum += BOMBER_TICK_MS;
+    if (secAccum >= 1000) {
+      secAccum -= 1000;
+      room.game = tickBomberTimer(room.game);
+      broadcastGameState(room);
+    }
+
+    if (room.game.status === "round_end") {
+      stopLoop(room);
+      room.game.roundWinnerIds.forEach((id) => awardRoundWin(room, id));
+      sendRoomUpdate(room);
+      broadcastGameState(room);
+      // Auto-advance after round end delay
+      setTimeout(() => {
+        if (!room || room.status !== "playing") return;
+        startNextBomberRound(room);
+      }, room.game.timer * 1000);
+    }
+  }, BOMBER_TICK_MS);
+}
+
+function startNextBomberRound(room) {
+  stopLoop(room);
+  room.game = nextBomberRound(room.game, Math.random);
+  broadcastGameState(room);
+  startBomberLoop(room);
+}
+
+// ── Word Chain ───────────────────────────────────────────────────
+
+function startWordChainGame(room, players) {
+  room.game = createWordChainState({ players, rng: Math.random });
+  broadcastGameState(room);
+  startWordChainTick(room);
+}
+
+function startWordChainTick(room) {
+  stopLoop(room);
+  room.interval = setInterval(() => {
+    room.game = tickWordChain(room.game);
+    broadcastGameState(room);
+    if (room.game.status === "playing" && room.game.timer <= 0) {
+      // Time's up — eliminate current player
+      room.game = eliminateCurrentPlayer(room.game);
+      broadcastGameState(room);
+      if (room.game.status === "round_end") {
+        awardRoundWin(room, room.game.roundWinnerId);
+        sendRoomUpdate(room);
+        // Auto-advance after reveal delay
+        setTimeout(() => {
+          if (!room || room.status !== "playing") return;
+          stopLoop(room);
+          room.game = nextWordChainRound(room.game, Math.random);
+          broadcastGameState(room);
+          startWordChainTick(room);
+        }, room.game.timer * 1000);
+      }
+    }
+  }, 1000);
+}
+
 // ── Shared helpers ───────────────────────────────────────────────
 
 function stopLoop(room) {
@@ -645,6 +808,15 @@ function broadcastGameState(room) {
       break;
     case "trivia":
       broadcast(room, { type: "state", state: serializeTrivia(room.game) });
+      break;
+    case "typeracer":
+      broadcast(room, { type: "state", state: serializeTyperacer(room.game) });
+      break;
+    case "wordchain":
+      broadcast(room, { type: "state", state: serializeWordChain(room.game) });
+      break;
+    case "bomber":
+      broadcast(room, { type: "state", state: serializeBomber(room.game) });
       break;
   }
 }
