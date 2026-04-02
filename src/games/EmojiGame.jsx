@@ -587,6 +587,11 @@ export default function EmojiGame({ game, room, me, send }) {
               <div className="status" style={{ fontSize: "0.85em", opacity: 0.75 }}>
                 {game.triesLeft} / {game.guessLimit} {game.triesLeft === 1 ? "try" : "tries"} left
               </div>
+              {game.triesLeft === 1 && game.hint && (
+                <div className="status" style={{ fontSize: "0.85em", letterSpacing: "0.1em" }}>
+                  Hint: <strong>{game.hint}</strong>
+                </div>
+              )}
               <div className="guess-row">
                 <input
                   value={guessInput}

@@ -354,5 +354,13 @@ export function serializeEmoji(state, forPlayerId) {
     result.answer = state.prompt.text;
   }
 
+  // On the last guess, reveal the first letter of each word as a hint
+  if (result.triesLeft === 1 && state.prompt?.text) {
+    result.hint = state.prompt.text
+      .split(" ")
+      .map((word) => word[0].toUpperCase() + "_".repeat(word.length - 1))
+      .join("  ");
+  }
+
   return result;
 }
