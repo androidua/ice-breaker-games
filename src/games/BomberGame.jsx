@@ -169,6 +169,11 @@ export default function BomberGame({ game, room, me, send }) {
     };
   }, []);
 
+  // Clear held keys at the start of each new round to avoid stale movement state
+  useEffect(() => {
+    heldKeysRef.current.clear();
+  }, [game?.round]);
+
   // Touch swipe on the canvas
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -227,13 +232,13 @@ export default function BomberGame({ game, room, me, send }) {
       <div className="bomber-controls">
         <div className="bomber-dpad">
           <button type="button" className="dpad-btn dpad-up"
-            onPointerDown={() => dpadDir("up")} onPointerUp={dpadStop} onPointerCancel={dpadStop}>▲</button>
+            onPointerDown={() => dpadDir("up")} onPointerUp={dpadStop} onPointerCancel={dpadStop} onPointerLeave={dpadStop}>▲</button>
           <button type="button" className="dpad-btn dpad-left"
-            onPointerDown={() => dpadDir("left")} onPointerUp={dpadStop} onPointerCancel={dpadStop}>◀</button>
+            onPointerDown={() => dpadDir("left")} onPointerUp={dpadStop} onPointerCancel={dpadStop} onPointerLeave={dpadStop}>◀</button>
           <button type="button" className="dpad-btn dpad-right"
-            onPointerDown={() => dpadDir("right")} onPointerUp={dpadStop} onPointerCancel={dpadStop}>▶</button>
+            onPointerDown={() => dpadDir("right")} onPointerUp={dpadStop} onPointerCancel={dpadStop} onPointerLeave={dpadStop}>▶</button>
           <button type="button" className="dpad-btn dpad-down"
-            onPointerDown={() => dpadDir("down")} onPointerUp={dpadStop} onPointerCancel={dpadStop}>▼</button>
+            onPointerDown={() => dpadDir("down")} onPointerUp={dpadStop} onPointerCancel={dpadStop} onPointerLeave={dpadStop}>▼</button>
         </div>
         <button
           type="button"
