@@ -29,6 +29,7 @@ In dev mode, the frontend on :5173 connects its WebSocket to :3000 automatically
 
 Two remotes: `origin` (work GitHub) and `personal` (personal GitHub).
 
+- Work directly on `main` — no feature branches. Solo developer, no PR review needed.
 - Push to `personal` only by default
 - Push to both only when explicitly asked
 
