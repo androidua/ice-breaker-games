@@ -152,6 +152,10 @@ export default function TruthsGame({ game, room, me, send }) {
         </div>
       )}
 
+      <p className="game-instructions">
+        The presenter writes 2 truths and 1 lie · Everyone else votes on which statement is the lie · Correct guesses earn points
+      </p>
+
       <Scoreboard game={game} room={room} />
     </main>
   );

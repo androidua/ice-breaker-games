@@ -102,6 +102,10 @@ export default function TriviaGame({ game, room, me, send }) {
         </div>
       )}
 
+      <p className="game-instructions">
+        Tap the correct answer before time runs out · Answer faster to score more points · Most points after all sets wins
+      </p>
+
       <Scoreboard game={game} room={room} />
     </main>
   );

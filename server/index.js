@@ -7,11 +7,11 @@ import { createGameState, setSnakeDirection, stepGame } from "./engine.js";
 import { createVotingState, submitVote, tickVoting, allVotesIn, resolveVoting, serializeVoting } from "./voting-engine.js";
 import { createTruthsState, handleTruthsAction, allTruthsVotesIn, revealTruths, nextTruthsRound, tickTruths, serializeTruths } from "./truths-engine.js";
 import { createEmojiState, handleEmojiAction, allEmojiGuessersCorrect, allEmojiGuessersExhausted, tickEmoji, revealEmoji, nextEmojiRound, serializeEmoji } from "./emoji-engine.js";
-import { createSketchState, handleSketchAction, allSketchGuessersCorrect, tickSketch, revealSketch, nextSketchRound, serializeSketch } from "./sketch-engine.js";
+import { createSketchState, handleSketchAction, tickSketch, revealSketch, nextSketchRound, serializeSketch } from "./sketch-engine.js";
 import { createTriviaState, handleTriviaAction, allAnswered, revealTrivia, nextTriviaQuestion, nextTriviaRound, tickTrivia, serializeTrivia } from "./trivia-engine.js";
 import { createTyperacerState, handleTyperacerAction, allTyperacerFinished, revealTyperacer, nextTyperacerRound, tickTyperacer, serializeTyperacer } from "./typeracer-engine.js";
 import { createWordChainState, handleWordChainAction, eliminateCurrentPlayer, nextWordChainRound, tickWordChain, serializeWordChain } from "./wordchain-engine.js";
-import { createBomberState, handleBomberAction, stepBomber, tickBomberTimer, nextBomberRound, serializeBomber, TICK_MS as BOMBER_TICK_MS } from "./bomber-engine.js";
+import { createBomberState, handleBomberAction, applyImmediateMove, stepBomber, tickBomberTimer, nextBomberRound, serializeBomber, TICK_MS as BOMBER_TICK_MS } from "./bomber-engine.js";
 
 const PORT = Number(process.env.PORT || process.env.SNAKE_WS_PORT || 3000);
 const SNAKE_TICK_MS = 120;
@@ -391,11 +391,9 @@ function handleGameAction(ws, clientId, action) {
     }
     case "sketch":
       room.game = handleSketchAction(room.game, clientId, action);
-      if (room.game.status === "drawing" && allSketchGuessersCorrect(room.game)) {
-        triggerSketchReveal(room);
-      } else {
-        broadcastGameState(room);
-      }
+      // revealIn countdown is started by the engine when first correct guess arrives;
+      // the draw timer tick will handle the transition to reveal.
+      broadcastGameState(room);
       break;
     case "trivia":
       // Host starts the next set after round_complete
@@ -447,6 +445,7 @@ function handleStopInput(clientId) {
   if (!room || room.status !== "playing") return;
   if (room.currentGame === "bomber") {
     room.game = handleBomberAction(room.game, clientId, { kind: "stop" });
+    broadcastGameState(room);
   }
 }
 
@@ -589,7 +588,13 @@ function startSketchDrawTimer(room) {
   room.interval = setInterval(() => {
     room.game = tickSketch(room.game);
     broadcastGameState(room);
-    if (room.game.timer <= 0) triggerSketchReveal(room);
+    if (room.game.revealIn === 0) {
+      // First correct guess countdown finished — transition to reveal
+      triggerSketchReveal(room);
+    } else if (room.game.timer <= 0) {
+      // Time ran out with no correct guess
+      triggerSketchReveal(room);
+    }
   }, 1000);
 }
 

@@ -142,6 +142,13 @@ export default function SketchGame({ game, room, me, send }) {
         </div>
       )}
 
+      {/* Countdown after first correct guess */}
+      {game.status === "drawing" && game.revealIn != null && (
+        <div className="status">
+          Next round in <strong>{game.revealIn}s</strong>
+        </div>
+      )}
+
       {/* Grid — only canvas + sidebar so both are exactly the same height */}
       <div className="sketch-layout">
         <canvas
@@ -166,9 +173,10 @@ export default function SketchGame({ game, room, me, send }) {
                 onChange={(e) => setGuessInput(e.target.value)}
                 placeholder="Type your guess..."
                 maxLength={200}
+                disabled={game.roundWinnerId != null}
                 onKeyDown={(e) => e.key === "Enter" && handleGuess()}
               />
-              <button type="button" onClick={handleGuess}>Guess</button>
+              <button type="button" onClick={handleGuess} disabled={game.roundWinnerId != null}>Guess</button>
             </div>
           )}
           <div className="guess-feed">
@@ -206,6 +214,10 @@ export default function SketchGame({ game, room, me, send }) {
           </button>
         </div>
       )}
+
+      <p className="game-instructions">
+        Drawer sketches a secret word · First player to guess correctly wins the round · One point per round win
+      </p>
     </main>
   );
 }

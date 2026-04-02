@@ -1,13 +1,13 @@
 // ── Bomberman Arena Engine ────────────────────────────────────────
 // Server-authoritative, 150ms tick. 15x15 grid. Free-for-all.
 
-const ROWS = 15;
-const COLS = 15;
+const ROWS = 30;
+const COLS = 30;
 const ROUND_DURATION = 120;
 const ROUND_END_DURATION = 4;
 const BOMB_TIMER_MS = 3000;
 const FLAME_DURATION_MS = 600;
-const TICK_MS = 150;
+const TICK_MS = 100;
 
 const EMPTY = 0;
 const WALL = 1;
@@ -16,8 +16,8 @@ const POWERUP_BOMB = 3;
 const POWERUP_RANGE = 4;
 
 const SPAWN_POSITIONS = [
-  { x: 1, y: 1 }, { x: 13, y: 1 }, { x: 1, y: 13 }, { x: 13, y: 13 },
-  { x: 7, y: 1 }, { x: 1, y: 7 }, { x: 13, y: 7 }, { x: 7, y: 13 },
+  { x: 1, y: 1 }, { x: 27, y: 1 }, { x: 1, y: 27 }, { x: 27, y: 27 },
+  { x: 13, y: 1 }, { x: 1, y: 13 }, { x: 27, y: 13 }, { x: 13, y: 27 },
 ];
 
 function key(x, y) { return `${x},${y}`; }
@@ -67,6 +67,9 @@ export function createBomberState({ players, rng }) {
       alive: true,
       dir: null,
       moving: false,
+      movingSetAt: 0,
+      moveStartX: spawn.x,
+      moveStartY: spawn.y,
       maxBombs: 1,
       activeBombs: 0,
       flameRange: 2,
@@ -103,13 +106,22 @@ export function handleBomberAction(state, playerId, action) {
     const d = action.dir?.toLowerCase();
     if (!VALID_DIRS.includes(d)) return state;
     const players = new Map(state.players);
-    players.set(playerId, { ...player, dir: d, moving: true });
+    players.set(playerId, { ...player, dir: d, moving: true, movingSetAt: Date.now(), moveStartX: player.x, moveStartY: player.y });
     return { ...state, players };
   }
 
   if (action.kind === "stop") {
     const players = new Map(state.players);
-    players.set(playerId, { ...player, moving: false });
+    // Only apply a tap-step if the player hasn't moved at all since the key was pressed.
+    // If the tick already moved them (position changed), skip — avoids double-move.
+    const elapsed = Date.now() - (player.movingSetAt || 0);
+    const hasMoved = player.x !== player.moveStartX || player.y !== player.moveStartY;
+    let updated = { ...player, moving: false };
+    if (elapsed < TICK_MS && !hasMoved && player.alive) {
+      const pos = computeMove(state, player, playerId);
+      if (pos) updated = { ...updated, ...pos };
+    }
+    players.set(playerId, updated);
     return { ...state, players };
   }
 
@@ -150,22 +162,39 @@ export function stepBomber(state, rng) {
   return s;
 }
 
+// Returns {x, y} if the player can move one step, null if blocked.
+function computeMove(state, p, playerId) {
+  if (!p.alive || !p.moving || !p.dir) return null;
+  let nx = p.x, ny = p.y;
+  if (p.dir === "up")    ny--;
+  if (p.dir === "down")  ny++;
+  if (p.dir === "left")  nx--;
+  if (p.dir === "right") nx++;
+  if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) return null;
+  const tile = state.grid[ny][nx];
+  if (tile === WALL || tile === BREAKABLE) return null;
+  const bombHere = state.bombs.find((b) => b.x === nx && b.y === ny);
+  if (bombHere && bombHere.ownerId !== playerId) return null;
+  return { x: nx, y: ny };
+}
+
 function movePlayers(state) {
   const players = new Map(state.players);
   players.forEach((p, id) => {
-    if (!p.alive || !p.moving || !p.dir) return;
-    let nx = p.x, ny = p.y;
-    if (p.dir === "up")    ny--;
-    if (p.dir === "down")  ny++;
-    if (p.dir === "left")  nx--;
-    if (p.dir === "right") nx++;
-    if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) return;
-    const tile = state.grid[ny][nx];
-    if (tile === WALL || tile === BREAKABLE) return;
-    const bombHere = state.bombs.find((b) => b.x === nx && b.y === ny);
-    if (bombHere && bombHere.ownerId !== id) return;
-    players.set(id, { ...p, x: nx, y: ny });
+    const pos = computeMove(state, p, id);
+    if (pos) players.set(id, { ...p, ...pos });
   });
+  return { ...state, players };
+}
+
+// Move a single player immediately (called on input receipt, before the next tick).
+export function applyImmediateMove(state, playerId) {
+  const p = state.players.get(playerId);
+  if (!p) return state;
+  const pos = computeMove(state, p, playerId);
+  if (!pos) return state;
+  const players = new Map(state.players);
+  players.set(playerId, { ...p, ...pos });
   return { ...state, players };
 }
 
@@ -294,6 +323,8 @@ function applyRoundScores(state, eliminationOrder) {
 function checkRoundEnd(state) {
   const alivePlayers = [...state.players.values()].filter((p) => p.alive);
   if (alivePlayers.length > 1) return state;
+  // Single-player game: only end when the player dies (0 alive); while alive, let the timer run.
+  if (alivePlayers.length === 1 && state.players.size === 1) return state;
 
   let eliminationOrder = state.eliminationOrder;
   if (alivePlayers.length === 1) {
@@ -355,6 +386,9 @@ export function nextBomberRound(state, rng) {
       flameRange: 2,
       dir: null,
       moving: false,
+      movingSetAt: 0,
+      moveStartX: spawn.x,
+      moveStartY: spawn.y,
     });
   });
 

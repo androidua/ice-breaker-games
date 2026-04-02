@@ -1,4 +1,4 @@
-const AVAILABLE_GAMES = ["snake", "truths", "emoji", "sketch", "trivia"];
+const AVAILABLE_GAMES = ["snake", "truths", "emoji", "sketch", "trivia", "typeracer", "wordchain", "bomber"];
 const VOTING_DURATION = 30;
 
 const GAME_LABELS = {
@@ -7,6 +7,9 @@ const GAME_LABELS = {
   emoji: "Emoji Storytelling",
   sketch: "Sketch & Guess",
   trivia: "Speed Trivia",
+  typeracer: "Type Racer",
+  wordchain: "Word Chain",
+  bomber: "Bomber Arena",
 };
 
 export function createVotingState() {

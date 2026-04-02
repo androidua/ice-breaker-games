@@ -128,6 +128,9 @@ export default function SnakeGame({ game, room, me, send }) {
           <Scoreboard game={game} room={room} />
         </div>
       </main>
+      <p className="game-instructions">
+        <kbd>↑↓←→</kbd> or <kbd>WASD</kbd> to steer · Swipe on mobile · Eat food to grow · Avoid walls &amp; other snakes
+      </p>
       <section className="controls" aria-label="On-screen controls">
         <div className="controls-row">
           <button type="button" onClick={() => send({ type: "input", dir: "UP" })}>Up</button>

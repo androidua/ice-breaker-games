@@ -267,21 +267,112 @@ const QUESTION_BANK = [
   { q: "What is the rarest blood type?", o: ["O-", "A-", "B-", "AB-"], c: 3 },
   { q: "How many keys does a standard piano have?", o: ["76", "82", "88", "92"], c: 2 },
   { q: "What is the pH of pure water?", o: ["5", "6", "7", "8"], c: 2 },
+  // Music
+  { q: "Which band released 'Bohemian Rhapsody'?", o: ["The Beatles", "Queen", "Led Zeppelin", "The Rolling Stones"], c: 1 },
+  { q: "How many members are in BTS?", o: ["5", "6", "7", "8"], c: 2 },
+  { q: "What instrument does a DJ primarily use?", o: ["Guitar", "Turntable", "Synthesiser", "Drum kit"], c: 1 },
+  { q: "What does 'BPM' stand for in music?", o: ["Beats Per Minute", "Bass Per Measure", "Bars Per Movement", "Band Practice Mode"], c: 0 },
+  { q: "Which singer is known as the 'Queen of Pop'?", o: ["Beyoncé", "Taylor Swift", "Madonna", "Lady Gaga"], c: 2 },
+  { q: "What genre of music originated in Jamaica?", o: ["Blues", "Reggae", "Ska", "Reggae — specifically from Kingston"], c: 1 },
+  { q: "How many octaves does a standard piano span?", o: ["5", "6", "7", "8"], c: 2 },
+  { q: "Which artist holds the record for most Grammy wins (as of 2024)?", o: ["Michael Jackson", "Beyoncé", "Taylor Swift", "Jay-Z"], c: 1 },
+  { q: "What does 'mp3' stand for?", o: ["Music Protocol 3", "MPEG Audio Layer 3", "Multi-Play 3", "Mono Play 3"], c: 1 },
+  { q: "Which decade did hip-hop originate?", o: ["1960s", "1970s", "1980s", "1990s"], c: 1 },
+  // Movies & TV
+  { q: "Who directed Jurassic Park?", o: ["James Cameron", "Steven Spielberg", "George Lucas", "Peter Jackson"], c: 1 },
+  { q: "What is the name of the toy cowboy in Toy Story?", o: ["Buzz", "Woody", "Rex", "Hamm"], c: 1 },
+  { q: "Which movie features the line 'I'll be back'?", o: ["Die Hard", "RoboCop", "The Terminator", "Predator"], c: 2 },
+  { q: "How many seasons of Breaking Bad are there?", o: ["3", "4", "5", "6"], c: 2 },
+  { q: "What streaming platform is Stranger Things on?", o: ["HBO", "Disney+", "Netflix", "Amazon Prime"], c: 2 },
+  { q: "Who plays Tony Stark in the Marvel movies?", o: ["Chris Evans", "Robert Downey Jr.", "Mark Ruffalo", "Chris Hemsworth"], c: 1 },
+  { q: "What is the highest-grossing movie of all time (not adjusted for inflation)?", o: ["Titanic", "Avengers: Endgame", "Avatar", "The Lion King"], c: 2 },
+  { q: "In which country was the TV show Squid Game produced?", o: ["Japan", "China", "South Korea", "Thailand"], c: 2 },
+  { q: "What colour is the One Ring in The Lord of the Rings?", o: ["Silver", "Gold", "Bronze", "Copper"], c: 1 },
+  { q: "Which animated movie features the song 'Let It Go'?", o: ["Moana", "Encanto", "Frozen", "Brave"], c: 2 },
+  { q: "What does the 'MCU' stand for?", o: ["Marvel Comics Universe", "Marvel Cinematic Universe", "Major Creative Universe", "Marvel Character Universe"], c: 1 },
+  { q: "Who wrote the Harry Potter series?", o: ["J.R.R. Tolkien", "C.S. Lewis", "J.K. Rowling", "Roald Dahl"], c: 2 },
+  // Famous People
+  { q: "Who was the first person to walk on the Moon?", o: ["Buzz Aldrin", "Neil Armstrong", "Yuri Gagarin", "John Glenn"], c: 1 },
+  { q: "Who painted the Mona Lisa?", o: ["Michelangelo", "Raphael", "Leonardo da Vinci", "Donatello"], c: 2 },
+  { q: "Who invented the telephone?", o: ["Thomas Edison", "Alexander Graham Bell", "Nikola Tesla", "Guglielmo Marconi"], c: 1 },
+  { q: "What nationality was Albert Einstein?", o: ["Austrian", "Swiss", "German", "He was stateless"], c: 2 },
+  { q: "Who was the first female Nobel Prize winner?", o: ["Rosalind Franklin", "Ada Lovelace", "Marie Curie", "Florence Nightingale"], c: 2 },
+  { q: "Who founded Apple Computer?", o: ["Bill Gates", "Steve Jobs", "Steve Jobs and Steve Wozniak", "Elon Musk"], c: 2 },
+  { q: "What was Cleopatra's nationality?", o: ["Egyptian", "Greek", "Roman", "Nubian"], c: 1 },
+  { q: "Who wrote Romeo and Juliet?", o: ["Charles Dickens", "Christopher Marlowe", "William Shakespeare", "John Milton"], c: 2 },
+  { q: "Which US president appears on the $100 bill?", o: ["George Washington", "Abraham Lincoln", "Benjamin Franklin", "Alexander Hamilton"], c: 2 },
+  { q: "Who was the youngest person to win a Nobel Peace Prize?", o: ["Malala Yousafzai", "Greta Thunberg", "Emma Gonzalez", "Autumn Peltier"], c: 0 },
+  // Internet & Technology (modern)
+  { q: "What does 'URL' stand for?", o: ["Uniform Resource Locator", "Universal Reference Link", "Unified Resource Line", "User Resource Location"], c: 0 },
+  { q: "In what year was the iPhone first released?", o: ["2005", "2006", "2007", "2008"], c: 2 },
+  { q: "What company owns Instagram?", o: ["Twitter", "Google", "Meta", "Snap"], c: 2 },
+  { q: "What does 'Wi-Fi' technically stand for?", o: ["Wireless Fidelity", "Wide Fidelity", "Wireless Frequency Interface", "It's a made-up brand name — nothing"], c: 3 },
+  { q: "What is the name of Google's AI assistant?", o: ["Siri", "Cortana", "Bard / Gemini", "Alexa"], c: 2 },
+  { q: "What programming language was created by Guido van Rossum?", o: ["Java", "Ruby", "Python", "Perl"], c: 2 },
+  { q: "How many bits are in a byte?", o: ["4", "6", "8", "16"], c: 2 },
+  { q: "What does 'GIF' stand for?", o: ["Graphic Interchange Format", "General Image File", "Global Image Frame", "Graphics Interface Format"], c: 0 },
+  { q: "Which company makes the PlayStation?", o: ["Microsoft", "Nintendo", "Sony", "Sega"], c: 2 },
+  { q: "What colour is the Twitter/X bird logo?", o: ["Blue", "White", "Black", "It changes"], c: 0 },
+  // Art & Literature (expanded)
+  { q: "Who wrote '1984'?", o: ["Aldous Huxley", "George Orwell", "Ray Bradbury", "Arthur C. Clarke"], c: 1 },
+  { q: "What is the name of the famous auction house founded in London in 1744?", o: ["Christie's", "Sotheby's", "Bonhams", "Phillips"], c: 1 },
+  { q: "In which museum can you find the Mona Lisa?", o: ["The British Museum", "The Prado", "The Louvre", "The Uffizi"], c: 2 },
+  { q: "Who wrote 'Pride and Prejudice'?", o: ["Charlotte Brontë", "George Eliot", "Jane Austen", "Mary Shelley"], c: 2 },
+  { q: "What art movement is Salvador Dalí associated with?", o: ["Impressionism", "Cubism", "Surrealism", "Dadaism"], c: 2 },
+  { q: "What colour is associated with the Impressionist painter Claude Monet?", o: ["Red", "Blue", "Green", "He used many colours — known for water lilies"], c: 3 },
+  // Math & Logic (expanded)
+  { q: "What is the square root of 144?", o: ["11", "12", "13", "14"], c: 1 },
+  { q: "What is 15% of 200?", o: ["25", "30", "35", "40"], c: 1 },
+  { q: "How many sides does a heptagon have?", o: ["5", "6", "7", "8"], c: 2 },
+  { q: "What is the next prime number after 13?", o: ["15", "16", "17", "18"], c: 2 },
+  { q: "If a pizza is cut into 8 slices and you eat 3, what fraction remains?", o: ["3/8", "5/8", "1/2", "2/3"], c: 1 },
+  // Food & Drink (expanded)
+  { q: "What is the main ingredient in guacamole?", o: ["Tomato", "Avocado", "Lime", "Jalapeño"], c: 1 },
+  { q: "Which country invented pizza?", o: ["Greece", "France", "Italy", "Spain"], c: 2 },
+  { q: "What is the most consumed beverage in the world after water?", o: ["Coffee", "Tea", "Beer", "Cola"], c: 1 },
+  { q: "What is the spice that gives turmeric its yellow colour?", o: ["Curcumin", "Capsaicin", "Piperine", "Lycopene"], c: 0 },
+  { q: "In which country did sushi originate?", o: ["China", "Korea", "Japan", "Vietnam"], c: 2 },
+  { q: "What does a Michelin star rate?", o: ["Hotels", "Restaurants", "Car services", "Tourist attractions"], c: 1 },
+  // Sports (expanded)
+  { q: "How many players are on a basketball team on the court?", o: ["4", "5", "6", "7"], c: 1 },
+  { q: "In which city were the first modern Olympic Games held?", o: ["Paris", "London", "Athens", "Rome"], c: 2 },
+  { q: "What is the maximum score in 10-pin bowling?", o: ["200", "250", "300", "350"], c: 2 },
+  { q: "How long is a marathon in kilometres (approx)?", o: ["32 km", "38 km", "42 km", "48 km"], c: 2 },
+  { q: "Which country has won the most FIFA World Cups?", o: ["Germany", "Argentina", "Italy", "Brazil"], c: 3 },
+  { q: "In tennis, what is the term for a score of 40-40?", o: ["Tie", "Deuce", "Advantage", "Set point"], c: 1 },
 ];
+
+function pickUnusedQuestions(usedIndices, rng, count = TOTAL_QUESTIONS) {
+  let available = QUESTION_BANK.map((_, i) => i).filter((i) => !usedIndices.has(i));
+  // If fewer unused questions remain than needed, reset and use full pool
+  if (available.length < count) {
+    usedIndices = new Set();
+    available = QUESTION_BANK.map((_, i) => i);
+  }
+  // Fisher-Yates shuffle of available indices
+  for (let i = available.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [available[i], available[j]] = [available[j], available[i]];
+  }
+  const picked = available.slice(0, count);
+  const newUsed = new Set(usedIndices);
+  picked.forEach((i) => newUsed.add(i));
+  return { questions: picked.map((i) => QUESTION_BANK[i]), usedIndices: newUsed };
+}
 
 export function createTriviaState({ players, rng }) {
   const playerIds = players.map((p) => p.id);
   const scores = new Map();
   playerIds.forEach((id) => scores.set(id, 0));
 
-  const shuffled = [...QUESTION_BANK].sort(() => rng() - 0.5);
-  const questions = shuffled.slice(0, TOTAL_QUESTIONS);
+  const { questions, usedIndices } = pickUnusedQuestions(new Set(), rng);
 
   return {
     gameType: "trivia",
     status: "question",
     playerIds,
     questions,
+    usedIndices,
     questionIndex: 0,
     answers: new Map(),
     scores,
@@ -364,13 +455,13 @@ export function nextTriviaQuestion(state) {
 }
 
 export function nextTriviaRound(state, rng) {
-  const shuffled = [...QUESTION_BANK].sort(() => rng() - 0.5);
-  const questions = shuffled.slice(0, TOTAL_QUESTIONS);
+  const { questions, usedIndices } = pickUnusedQuestions(state.usedIndices || new Set(), rng);
 
   return {
     ...state,
     status: "question",
     questions,
+    usedIndices,
     questionIndex: 0,
     answers: new Map(),
     timer: QUESTION_DURATION,

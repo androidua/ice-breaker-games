@@ -6,9 +6,12 @@ import TruthsGame from "./games/TruthsGame.jsx";
 import EmojiGame from "./games/EmojiGame.jsx";
 import SketchGame from "./games/SketchGame.jsx";
 import TriviaGame from "./games/TriviaGame.jsx";
+import TyperacerGame from "./games/TyperacerGame.jsx";
+import WordChainGame from "./games/WordChainGame.jsx";
+import BomberGame from "./games/BomberGame.jsx";
 
 function getWsUrl() {
-  const isDev = window.location.port === "5173";
+  const isDev = window.location.port.startsWith("517");
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const host = window.location.hostname;
   const port = isDev ? 3000 : window.location.port;
@@ -22,12 +25,15 @@ const KEY_TO_DIR = {
 
 const GAME_COMPONENTS = {
   snake: SnakeGame, truths: TruthsGame, emoji: EmojiGame,
-  sketch: SketchGame, trivia: TriviaGame,
+  sketch: SketchGame, trivia: TriviaGame, typeracer: TyperacerGame, wordchain: WordChainGame, bomber: BomberGame,
 };
 
 const GAME_LABELS = {
   snake: "Snake Arena", truths: "Two Truths & a Lie",
   emoji: "Emoji Storytelling", sketch: "Sketch & Guess", trivia: "Speed Trivia",
+  typeracer: "Type Racer",
+  wordchain: "Word Chain",
+  bomber: "Bomber Arena",
 };
 
 export default function App() {
@@ -80,7 +86,7 @@ export default function App() {
 
   useEffect(() => {
     const handleKey = (event) => {
-      if (room?.currentGame !== "snake") return;
+      if (room?.currentGame !== "snake" && room?.currentGame !== "bomber") return;
       const dir = KEY_TO_DIR[event.key];
       if (dir) {
         event.preventDefault();

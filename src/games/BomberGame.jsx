@@ -262,6 +262,16 @@ export default function BomberGame({ game, room, me, send }) {
         </div>
       )}
 
+      <div className="bomber-help">
+        <div className="bomber-help-row">
+          <span><kbd>↑↓←→</kbd> / <kbd>WASD</kbd> move &nbsp;·&nbsp; <kbd>Space</kbd> drop bomb</span>
+          <span className="bomber-help-mobile">D-pad to move · 💣 button to drop bomb</span>
+        </div>
+        <div className="bomber-help-row">
+          <span>💣 power-up = +1 bomb capacity &nbsp;·&nbsp; 🔥 power-up = longer flame range</span>
+        </div>
+      </div>
+
       <div className="bomber-scoreboard">
         {Object.values(game.players || {})
           .sort((a, b) => (scores?.[b.id] ?? 0) - (scores?.[a.id] ?? 0))

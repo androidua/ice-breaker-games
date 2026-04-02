@@ -2,15 +2,18 @@
 
 A collection of real-time multiplayer icebreaker games for up to 8 players. Host a room, share a link, vote on which game to play, and compete!
 
-**Works on mobile** — players can join from phones or tablets. Snake supports swipe-to-move and on-screen arrow buttons. Sketch & Guess supports finger drawing. All other games are tap-friendly with large touch targets.
+**Works on mobile** — players can join from phones or tablets. Snake and Bomber Arena support swipe-to-move and on-screen controls. Sketch & Guess supports finger drawing. All other games are tap-friendly with large touch targets.
 
 **Live at:** [ice-breaker-games-production.up.railway.app](https://ice-breaker-games-production.up.railway.app/)
 
 **Included games:**
 - **Snake Arena** — Classic multiplayer snake. Eat food, grow, outlast opponents.
+- **Bomber Arena** — Bomberman-style free-for-all. Drop bombs, chain explosions, collect power-ups.
+- **Type Racer** — Race to type a paragraph fastest. Errors must be corrected before you advance.
+- **Word Chain** — Each word must start with the last letter of the previous. Too slow? You're eliminated.
 - **Two Truths & a Lie** — One player writes three statements. Others guess which is the lie.
 - **Emoji Storytelling** — Describe a movie/phrase using only emojis. Others guess the answer.
-- **Sketch & Guess** — One player draws a secret word. Others type guesses in real time.
+- **Sketch & Guess** — One player draws a secret word. First to guess correctly wins the round.
 - **Speed Trivia** — Timed multiple-choice questions. Faster correct answers earn more points.
 
 ---
@@ -255,6 +258,59 @@ The tunnel doesn't install any background service and doesn't leave anything run
 
 ---
 
+### Bomber Arena
+
+**Controls:**
+- **Desktop:** Arrow keys or WASD to move, Space to drop a bomb
+- **Mobile:** On-screen D-pad to move, 💣 button to drop a bomb
+
+**How it works:** Each player starts in a corner of a 30×30 grid filled with breakable walls. Move continuously to navigate the maze, drop bombs to destroy walls and eliminate other players. Bombs explode in a + pattern after a short fuse.
+
+**Power-ups** spawn when a breakable wall is destroyed:
+- 💣 — increases your maximum bomb capacity by 1
+- 🔥 — increases your flame range by 1 tile
+
+**Scoring:** 1 point per kill (player eliminated by your bomb's explosion).
+
+**Winning a round:** The last player alive wins the round.
+
+**Timer:** Rounds have a time limit. When it expires the player with the highest score wins. The host clicks **Next Round** to start a new round.
+
+---
+
+### Type Racer
+
+**How it works:** All players see the same paragraph. Type it as fast and accurately as you can — your progress is shown in real time as a progress bar. Incorrect characters are highlighted in red and must be corrected before you can advance.
+
+**Scoring:** Points are awarded based on finishing position:
+- 1st to finish → most points; subsequent finishers get decreasing points
+- Players who don't finish before time runs out score based on how far they got
+
+**Winning a round:** First player to complete the paragraph wins the round.
+
+**Stats shown after each round:** WPM (words per minute) and mistake count per player.
+
+**Timer:** A countdown runs during the race. The host can click **Skip** to end early.
+
+---
+
+### Word Chain
+
+**How it works:** Players take turns in order. On your turn, type a word that starts with the **last letter** of the previous word. For example: *apple* → *elephant* → *tiger* → *rabbit* → ...
+
+**Elimination:** If you can't think of a valid word before your timer runs out, you're eliminated. The game continues until only one player remains.
+
+**Rules:**
+- Words must start with the correct letter
+- Words already used in this round are rejected
+- Only letters are allowed (no numbers or punctuation)
+
+**Scoring:** 1 point awarded to the round winner (last player standing).
+
+**Timer:** Each player has a limited number of seconds per turn (shown on screen). Runs out → eliminated.
+
+---
+
 ### Two Truths & a Lie
 
 **How it works:** Players take turns as the presenter. The presenter writes three statements about themselves — two true and one lie — then marks which one is the lie. They have **60 seconds** to submit. The other players then have **30 seconds** to vote on which statement they think is the lie.
@@ -290,16 +346,13 @@ The tunnel doesn't install any background service and doesn't leave anything run
 
 **How it works:** Players take turns as the drawer. The drawer sees a secret word and draws it on a canvas using their mouse, trackpad, or finger (touch screens fully supported). Colour options (black, blue, red, yellow, green) and a clear button are available. Other players see the drawing in real time and type guesses while the drawer is still drawing.
 
-**Scoring:** Same as Emoji Storytelling:
-- 1st correct guesser → **4 points**
-- 2nd correct guesser → **3 points**
-- 3rd correct guesser → **2 points**
-- 4th+ correct guesser → **1 point**
-- The drawer gets **+1 point** per correct guesser
+**Scoring:**
+- First player to guess correctly → **1 point** and wins the round immediately
+- No points for later guesses or the drawer
 
-**Winning a round:** The first player to guess correctly wins the round.
+**Winning a round:** The moment the first correct guess lands, a 3-second countdown begins, then the round ends. If time runs out with no correct guess, no one scores.
 
-**Timer:** The drawer has **45 seconds**. When it runs out, the word is revealed and the next round starts. The host can also click **Skip**.
+**Timer:** The drawer has **45 seconds**. The host can also click **Skip**.
 
 ---
 
@@ -325,8 +378,8 @@ Formula: `points = ceil((time_remaining / 15) × 1000)`, minimum 100.
 **Host controls (available to the room creator):**
 - **Start Games** — begins the first voting round from the lobby
 - **End Game** — ends the current game, awards a game win to the leading player, and returns to voting
-- **Next Round** (Snake only) — starts a new snake round after one ends
-- **Skip** (Truths, Emoji, Sketch) — force-advances a stuck phase
+- **Next Round** (Snake, Bomber) — starts a new round after one ends
+- **Skip** (Truths, Emoji, Sketch, TypeRacer) — force-advances a stuck phase
 - **Start Next Set** (Trivia only) — begins the next 10-question set after a round completes
 
 **Two-tier leaderboard:**
@@ -374,6 +427,9 @@ ice-breaker-games/
 │   ├── index.css           # All styles
 │   └── games/
 │       ├── SnakeGame.jsx
+│       ├── BomberGame.jsx
+│       ├── TyperacerGame.jsx
+│       ├── WordChainGame.jsx
 │       ├── TruthsGame.jsx
 │       ├── EmojiGame.jsx
 │       ├── SketchGame.jsx
@@ -381,6 +437,9 @@ ice-breaker-games/
 ├── server/                 # Backend (Node.js + ws)
 │   ├── index.js            # HTTP + WebSocket server, room management
 │   ├── engine.js           # Snake game engine
+│   ├── bomber-engine.js    # Bomber Arena engine
+│   ├── typeracer-engine.js # Type Racer engine
+│   ├── wordchain-engine.js # Word Chain engine
 │   ├── voting-engine.js    # Voting phase logic
 │   ├── truths-engine.js    # Two Truths & a Lie engine
 │   ├── emoji-engine.js     # Emoji Storytelling engine

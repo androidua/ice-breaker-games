@@ -171,6 +171,16 @@ const PROMPTS = [
   { text: "X Marks the Spot", category: "Phrase" },
 ];
 
+function getGuessLimit(playerCount) {
+  return playerCount === 2 ? 5 : 3;
+}
+
+function initGuessAttempts(playerIds, storytellerId) {
+  const map = new Map();
+  playerIds.forEach((id) => { if (id !== storytellerId) map.set(id, 0); });
+  return map;
+}
+
 export function createEmojiState({ players, rng }) {
   const playerIds = players.map((p) => p.id);
   const scores = new Map();
@@ -193,6 +203,7 @@ export function createEmojiState({ players, rng }) {
     emojis: null,
     guesses: [],
     correctGuessers: [],
+    guessAttempts: initGuessAttempts(playerIds, firstStoryteller),
     scores,
     round: 1,
     timer: COMPOSE_DURATION,
@@ -235,6 +246,9 @@ function submitEmojiGuess(state, playerId, text) {
   if (playerId === state.storytellerId) return state;
   if (state.correctGuessers.includes(playerId)) return state;
 
+  const limit = getGuessLimit(state.playerIds.length);
+  if ((state.guessAttempts.get(playerId) || 0) >= limit) return state;
+
   const guess = String(text).trim().slice(0, 200);
   if (guess.length === 0) return state;
 
@@ -246,6 +260,9 @@ function submitEmojiGuess(state, playerId, text) {
     ? [...state.correctGuessers, playerId]
     : state.correctGuessers;
 
+  const guessAttempts = new Map(state.guessAttempts);
+  guessAttempts.set(playerId, (guessAttempts.get(playerId) || 0) + 1);
+
   let scores = state.scores;
   if (correct) {
     scores = new Map(state.scores);
@@ -254,12 +271,20 @@ function submitEmojiGuess(state, playerId, text) {
     scores.set(state.storytellerId, (scores.get(state.storytellerId) || 0) + 1);
   }
 
-  return { ...state, guesses, correctGuessers, scores };
+  return { ...state, guesses, correctGuessers, guessAttempts, scores };
 }
 
 export function allEmojiGuessersCorrect(state) {
   const guessers = state.playerIds.filter((id) => id !== state.storytellerId);
   return guessers.length > 0 && guessers.every((id) => state.correctGuessers.includes(id));
+}
+
+export function allEmojiGuessersExhausted(state) {
+  const limit = getGuessLimit(state.playerIds.length);
+  const guessers = state.playerIds.filter((id) => id !== state.storytellerId);
+  return guessers.length > 0 && guessers.every(
+    (id) => state.correctGuessers.includes(id) || (state.guessAttempts.get(id) || 0) >= limit
+  );
 }
 
 export function tickEmoji(state) {
@@ -294,6 +319,7 @@ export function nextEmojiRound(state, rng) {
     emojis: null,
     guesses: [],
     correctGuessers: [],
+    guessAttempts: initGuessAttempts(state.playerIds, nextStoryteller),
     round: state.round + 1,
     timer: COMPOSE_DURATION,
     promptIndex,
@@ -302,6 +328,7 @@ export function nextEmojiRound(state, rng) {
 }
 
 export function serializeEmoji(state, forPlayerId) {
+  const limit = getGuessLimit(state.playerIds.length);
   const result = {
     gameType: "emoji",
     status: state.status,
@@ -313,6 +340,10 @@ export function serializeEmoji(state, forPlayerId) {
     scores: Object.fromEntries(state.scores),
     promptCategory: state.prompt?.category || null,
     roundWinnerId: state.roundWinnerId,
+    guessLimit: limit,
+    triesLeft: forPlayerId !== state.storytellerId
+      ? Math.max(0, limit - (state.guessAttempts.get(forPlayerId) || 0))
+      : null,
   };
 
   if (forPlayerId === state.storytellerId) {

@@ -741,12 +741,30 @@ button:disabled {
   text-align: center;
 }
 
+/* ── Shared game instructions bar ────────────────────────── */
+.game-instructions {
+  font-size: 12px;
+  color: #888;
+  text-align: center;
+  padding: 6px 12px;
+  line-height: 1.6;
+}
+.game-instructions kbd {
+  display: inline-block;
+  font-family: inherit;
+  font-size: 11px;
+  background: #e8e2d9;
+  border: 1px solid #bbb;
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
 /* ── Bomber Arena ─────────────────────────────────────────── */
 
 /* Bomber Arena canvas */
 .bomber-canvas {
   display: block;
-  width: min(90vw, 420px);
+  width: min(90vw, 540px);
   aspect-ratio: 1 / 1;
   margin: 0 auto 10px;
   border: 2px solid #444;
@@ -754,12 +772,41 @@ button:disabled {
   touch-action: none;
 }
 
+/* Bomber help / instructions */
+.bomber-help {
+  width: min(90vw, 540px);
+  margin: 0 auto 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.bomber-help-row {
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+}
+.bomber-help-row kbd {
+  display: inline-block;
+  font-family: inherit;
+  font-size: 11px;
+  background: #e8e2d9;
+  border: 1px solid #bbb;
+  border-radius: 3px;
+  padding: 0 4px;
+}
+/* On touch devices, show mobile hint instead of keyboard hint */
+.bomber-help-mobile { display: none; }
+@media (hover: none) {
+  .bomber-help-row span:first-child { display: none; }
+  .bomber-help-mobile { display: inline; }
+}
+
 /* Bomber scoreboard */
 .bomber-scoreboard {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  width: min(90vw, 420px);
+  width: min(90vw, 540px);
   margin: 8px auto 0;
 }
 
