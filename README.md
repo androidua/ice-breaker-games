@@ -4,7 +4,7 @@ A collection of real-time multiplayer icebreaker games for up to 8 players. Host
 
 **Works on mobile** — players can join from phones or tablets. Snake and Bomber Arena support swipe-to-move and on-screen controls. Sketch & Guess supports finger drawing. All other games are tap-friendly with large touch targets.
 
-**Live at:** [ice-breaker-games-production.up.railway.app](https://ice-breaker-games-production.up.railway.app/)
+**Live at:** [huddleplayroom.com](https://huddleplayroom.com/)
 
 **Included games:**
 - **Snake Arena** — Classic multiplayer snake. Eat food, grow, outlast opponents.
@@ -23,7 +23,7 @@ A collection of real-time multiplayer icebreaker games for up to 8 players. Host
 The game is already hosted online. Just share the link:
 
 ```
-https://ice-breaker-games-production.up.railway.app/
+https://huddleplayroom.com/
 ```
 
 - One person opens the link, clicks **Host Room**, and shares the 4-character room code
@@ -124,7 +124,7 @@ Node.js is the engine that runs the game server.
 **Step 3 — Clone and install**
 
 ```bash
-git clone https://github.com/dmytrobondarenko-cloud/ice-breaker-games.git
+git clone https://github.com/androidua/ice-breaker-games.git
 cd ice-breaker-games
 npm install
 ```
@@ -282,15 +282,11 @@ The tunnel doesn't install any background service and doesn't leave anything run
 
 **How it works:** All players see the same paragraph. Type it as fast and accurately as you can — your progress is shown in real time as a progress bar. Incorrect characters are highlighted in red and must be corrected before you can advance.
 
-**Scoring:** Points are awarded based on finishing position:
-- 1st to finish → most points; subsequent finishers get decreasing points
-- Players who don't finish before time runs out score based on how far they got
-
-**Winning a round:** First player to complete the paragraph wins the round.
+**Scoring:** Each player who finishes scores `1000 − (mistakes × 50) + speed bonus`, where the speed bonus is up to 500 points based on how much time was left. Players who don't finish score 0. The player with the highest score wins the round.
 
 **Stats shown after each round:** WPM (words per minute) and mistake count per player.
 
-**Timer:** A countdown runs during the race. The host can click **Skip** to end early.
+**Timer:** 90 seconds. The host can click **Skip** to end early.
 
 ---
 
@@ -307,7 +303,7 @@ The tunnel doesn't install any background service and doesn't leave anything run
 
 **Scoring:** 1 point awarded to the round winner (last player standing).
 
-**Timer:** Each player has a limited number of seconds per turn (shown on screen). Runs out → eliminated.
+**Timer:** Each player has **10 seconds** per turn (shown on screen). Runs out → eliminated.
 
 ---
 
@@ -395,7 +391,7 @@ Formula: `points = ceil((time_remaining / 15) × 1000)`, minimum 100.
 | `npm: command not found` | Node.js is not installed. See First-Time Setup above. |
 | `git: command not found` | Git is not installed. See First-Time Setup above. |
 | `npm start` shows an error | Make sure you ran `npm install` first and you're in the `ice-breaker-games` folder. |
-| Railway URL doesn't load | Railway may be waking up the server — wait 5–10 seconds and refresh. |
+| huddleplayroom.com doesn't load | Railway may be waking up the server — wait 5–10 seconds and refresh. |
 | Friends can't open the tunnel URL | Make sure your tunnel terminal is still running. The URL changes each session. |
 | Page loads but shows "Connection: connecting" | The game server may have stopped. Check that `npm start` is still running. |
 | "Room not found" error | Double-check the 4-character room code. It's case-insensitive. |
