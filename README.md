@@ -299,6 +299,7 @@ The tunnel doesn't install any background service and doesn't leave anything run
 **Rules:**
 - Words must start with the correct letter
 - Words already used in this round are rejected
+- Words must be real English words (gibberish is rejected)
 - Only letters are allowed (no numbers or punctuation)
 
 **Scoring:** 1 point awarded to the round winner (last player standing).

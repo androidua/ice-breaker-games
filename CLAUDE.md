@@ -65,7 +65,7 @@ Hosted on **Railway**, auto-deploying from GitHub on every push.
 
 ### Server (`server/`)
 
-`index.js` (~710 lines) is the entire server: HTTP static file serving, WebSocket lifecycle, room management, message routing, timer orchestration, and game dispatch. The `rooms` Map is the single source of truth.
+`index.js` (~890 lines) is the entire server: HTTP static file serving, WebSocket lifecycle, room management, message routing, timer orchestration, and game dispatch. The `rooms` Map is the single source of truth.
 
 Each game has a **pure engine module** (no side effects, no timers, no WebSocket access):
 
@@ -80,6 +80,8 @@ Each game has a **pure engine module** (no side effects, no timers, no WebSocket
 | `typeracer-engine.js` | Type Racer | `createTyperacerState()`, `handleTyperacerAction()`, `tickTyperacer()` |
 | `wordchain-engine.js` | Word Chain | `createWordChainState()`, `handleWordChainAction()`, `tickWordChain()` |
 | `voting-engine.js` | Game voting phase | `createVotingState()`, `submitVote()`, `resolveVoting()` |
+
+`words-en.txt` is a bundled 172k-word English dictionary (ENABLE2k, public domain) used by `wordchain-engine.js` for word validation. Loaded once at startup into a Set.
 
 **Pattern for engines:** functions take current state + inputs, return new state. `index.js` calls engine functions, manages timers (`setInterval`), and broadcasts results. Keep this separation strict.
 
@@ -110,7 +112,7 @@ Two tiers tracked separately:
 
 ### Timers
 
-- Snake ticks every 100ms
+- Snake ticks every 120ms
 - Bomber Arena ticks every 100ms (movement) and 1000ms (round timer)
 - All other game/voting timers tick every 1000ms
 - WebSocket ping/pong heartbeat runs every 25s to keep connections alive through proxies and load balancers
