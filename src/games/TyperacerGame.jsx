@@ -3,7 +3,6 @@ import { useState, useEffect, useRef } from "react";
 export default function TyperacerGame({ game, room, me, send }) {
   const [typed, setTyped] = useState("");
   const inputRef = useRef(null);
-  const sentFinishRef = useRef(false);
 
   const isHost = room?.hostId === me.id;
   const canSkip = isHost && game?.status === "racing";
@@ -13,7 +12,6 @@ export default function TyperacerGame({ game, room, me, send }) {
     if (game?.status === "racing") {
       inputRef.current?.focus();
       setTyped("");
-      sentFinishRef.current = false;
     }
   }, [game?.status, game?.round]);
 
@@ -24,10 +22,6 @@ export default function TyperacerGame({ game, room, me, send }) {
     const clamped = value.slice(0, game.paragraph.length + 5);
     setTyped(clamped);
     send({ type: "gameAction", action: { kind: "progress", typed: clamped } });
-
-    if (clamped === game.paragraph && !sentFinishRef.current) {
-      sentFinishRef.current = true;
-    }
   };
 
   if (!game) return null;
@@ -41,13 +35,27 @@ export default function TyperacerGame({ game, room, me, send }) {
     <main className="game-stage">
       <div className="game-header">
         <span>Round {game.round}</span>
-        {game.timer != null && (
-          <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+        {game.closingCountdown != null ? (
+          <span className={`voting-timer${game.closingCountdown <= 5 ? " timer-urgent" : ""}`}>
+            {game.closingCountdown}s
+          </span>
+        ) : (
+          game.timer != null && (
+            <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+          )
         )}
       </div>
 
       {game.status === "racing" && (
         <div className="panel">
+          {game.closingCountdown != null && (() => {
+            const finishedPlayers = room?.players.filter((p) => game.progress?.[p.id]?.finished) || [];
+            const label =
+              finishedPlayers.length === 1
+                ? `${finishedPlayers[0].name} finished!`
+                : `${finishedPlayers.length} players finished!`;
+            return <div className="status">{label} {game.closingCountdown}s left</div>;
+          })()}
           {/* Paragraph display with per-character colouring */}
           <div className="typeracer-text" onClick={() => inputRef.current?.focus()}>
             {paragraph.split("").map((char, i) => {
@@ -133,7 +141,9 @@ export default function TyperacerGame({ game, room, me, send }) {
                       <span>{p.mistakes} mistake{p.mistakes !== 1 ? "s" : ""}</span>
                     </>
                   ) : (
-                    <span style={{ opacity: 0.5 }}>did not finish</span>
+                    <span style={{ opacity: 0.5 }}>
+                      {Math.round(((game.progress?.[p.id]?.typedLength || 0) / (game.paragraph?.length || 1)) * 100)}% done
+                    </span>
                   )}
                   <span><strong>{p.score} pts</strong></span>
                 </div>
@@ -151,7 +161,7 @@ export default function TyperacerGame({ game, room, me, send }) {
       )}
 
       <p className="game-instructions">
-        Type the paragraph as fast and accurately as you can · First to finish wins · Errors must be corrected before you can continue
+        Type the paragraph as fast and accurately as you can · Mistakes are penalised but won't block you from finishing
       </p>
 
       <Scoreboard game={game} room={room} />
