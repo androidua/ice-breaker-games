@@ -165,7 +165,7 @@ export function revealTyperacer(state) {
     }
   });
 
-  return { ...state, status: "reveal", scores, timer: REVEAL_DURATION, roundWinnerId: winnerId };
+  return { ...state, status: "reveal", scores, timer: REVEAL_DURATION, roundWinnerId: winnerId, closingCountdown: null };
 }
 
 export function nextTyperacerRound(state, rng) {
