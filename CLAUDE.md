@@ -37,12 +37,13 @@ Two remotes: `origin` (work GitHub) and `personal` (personal GitHub).
 
 Follows semver. After every confirmed fix or feature, before pushing:
 
-1. Bump `package.json` version (`patch` for bug fixes, `minor` for new features/games)
-2. Commit the version bump together with any remaining changes
-3. Create an annotated git tag: `git tag -a vX.Y.Z -m "vX.Y.Z — short description"`
-4. Push tag: `git push personal vX.Y.Z`
+1. Bump `version` in `package.json` (`patch` for bug fixes, `minor` for new features/games)
+2. Run `npm install --package-lock-only` to sync `package-lock.json` (no actual install, just updates the lockfile metadata)
+3. Commit both files together with any remaining changes
+4. Create an annotated git tag: `git tag -a vX.Y.Z -m "vX.Y.Z — short description"`
+5. Push branch and tag: `git push personal main && git push personal vX.Y.Z`
 
-Current version is tracked in `package.json`. Git tags are the source of truth for releases. The tag message should briefly describe what changed (e.g. `v1.5.1 — Word Chain duplicate/dictionary fixes`).
+Current version is tracked in `package.json`. `package-lock.json` must always match. Git tags are the source of truth for releases. The tag message should briefly describe what changed (e.g. `v1.5.1 — Word Chain duplicate/dictionary fixes`).
 
 ## Deployment
 
