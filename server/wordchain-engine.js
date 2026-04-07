@@ -1,3 +1,15 @@
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const WORDS = new Set(
+  readFileSync(join(__dirname, "words-en.txt"), "utf8")
+    .split("\n")
+    .map((w) => w.trim().toLowerCase())
+    .filter(Boolean)
+);
+
 const TURN_DURATION = 10;
 const REVEAL_DURATION = 4;
 
@@ -53,11 +65,14 @@ function submitWord(state, playerId, word) {
   // Must start with last letter of current word (if there is one)
   if (state.currentWord !== null) {
     const lastLetter = state.currentWord[state.currentWord.length - 1];
-    if (w[0] !== lastLetter) return { ...state, status: "invalid", invalidReason: "wrong_letter" };
+    if (w[0] !== lastLetter) return { ...state, invalidReason: "wrong_letter" };
   }
 
   // Can't reuse a word
-  if (state.usedWords.has(w)) return { ...state, status: "invalid", invalidReason: "already_used" };
+  if (state.usedWords.has(w)) return { ...state, invalidReason: "already_used" };
+
+  // Must be a real word
+  if (!WORDS.has(w)) return { ...state, invalidReason: "not_a_word" };
 
   // Valid word — award points, advance turn
   const usedWords = new Set(state.usedWords);

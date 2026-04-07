@@ -98,6 +98,9 @@ export default function WordChainGame({ game, room, me, send }) {
           {game.invalidReason === "already_used" && isMyTurn && (
             <div className="status" style={{ color: "#c0392b" }}>That word was already used!</div>
           )}
+          {game.invalidReason === "not_a_word" && isMyTurn && (
+            <div className="status" style={{ color: "#c0392b" }}>That's not a valid word!</div>
+          )}
         </div>
       )}
 
