@@ -33,6 +33,17 @@ Two remotes: `origin` (work GitHub) and `personal` (personal GitHub).
 - Push to `personal` only by default
 - Push to both only when explicitly asked
 
+## Versioning
+
+Follows semver. After every confirmed fix or feature, before pushing:
+
+1. Bump `package.json` version (`patch` for bug fixes, `minor` for new features/games)
+2. Commit the version bump together with any remaining changes
+3. Create an annotated git tag: `git tag -a vX.Y.Z -m "vX.Y.Z — short description"`
+4. Push tag: `git push personal vX.Y.Z`
+
+Current version is tracked in `package.json`. Git tags are the source of truth for releases. The tag message should briefly describe what changed (e.g. `v1.5.1 — Word Chain duplicate/dictionary fixes`).
+
 ## Deployment
 
 Hosted on **Railway**, auto-deploying from GitHub on every push.
