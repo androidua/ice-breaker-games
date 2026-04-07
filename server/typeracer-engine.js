@@ -188,7 +188,11 @@ export function nextTyperacerRound(state, rng) {
 
 export function tickTyperacer(state) {
   if (state.timer == null || state.timer <= 0) return state;
-  return { ...state, timer: state.timer - 1 };
+  const newClosing =
+    state.closingCountdown != null && state.closingCountdown > 0
+      ? state.closingCountdown - 1
+      : state.closingCountdown;
+  return { ...state, timer: state.timer - 1, closingCountdown: newClosing };
 }
 
 export function serializeTyperacer(state) {
