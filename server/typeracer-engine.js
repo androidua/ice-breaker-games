@@ -156,7 +156,7 @@ export function revealTyperacer(state) {
       const typedLen = p.typed.length;
       const currentMistakes = countMistakes(p.typed, state.paragraph.slice(0, typedLen));
       const progress = state.paragraph.length > 0 ? typedLen / state.paragraph.length : 0;
-      points = Math.max(0, Math.floor(progress * 400) - currentMistakes * 10);
+      points = Math.min(49, Math.max(0, Math.floor(progress * 400) - currentMistakes * 10));
     }
     scores.set(playerId, (scores.get(playerId) || 0) + points);
     if (points > topScore) {
