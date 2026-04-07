@@ -148,12 +148,21 @@ export function revealTyperacer(state) {
   let winnerId = null;
 
   state.progress.forEach((p, playerId) => {
-    if (!p.finished) return;
-    const timeRemaining = Math.max(0, state.timer);
-    const speedBonus = Math.floor((timeRemaining / RACE_DURATION) * 500);
-    const points = Math.max(0, 1000 - p.mistakes * 50) + speedBonus;
+    let points;
+    if (p.finished) {
+      const elapsedSeconds = (p.finishTime - state.raceStartTime) / 1000;
+      points = Math.max(50, 1000 - Math.floor(elapsedSeconds * 10) - p.mistakes * 30);
+    } else {
+      const typedLen = p.typed.length;
+      const currentMistakes = countMistakes(p.typed, state.paragraph.slice(0, typedLen));
+      const progress = state.paragraph.length > 0 ? typedLen / state.paragraph.length : 0;
+      points = Math.max(0, Math.floor(progress * 400) - currentMistakes * 10);
+    }
     scores.set(playerId, (scores.get(playerId) || 0) + points);
-    if (points > topScore) { topScore = points; winnerId = playerId; }
+    if (points > topScore) {
+      topScore = points;
+      winnerId = playerId;
+    }
   });
 
   return { ...state, status: "reveal", scores, timer: REVEAL_DURATION, roundWinnerId: winnerId };
