@@ -42,15 +42,7 @@ const MIME_TYPES = {
   ".woff": "font/woff", ".woff2": "font/woff2",
 };
 
-const CANONICAL_HOST = "huddleplayroom.com";
-
 const httpServer = createServer((req, res) => {
-  const host = (req.headers.host || "").split(":")[0];
-  if (host && host !== CANONICAL_HOST && host !== "localhost") {
-    res.writeHead(301, { Location: `https://${CANONICAL_HOST}${req.url}` });
-    res.end();
-    return;
-  }
   if (!HAS_DIST) {
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end("<html><body><h2>Game server is running.</h2><p>Run <code>npm run build</code> first, or use <code>npm run dev</code> for development.</p></body></html>");
@@ -692,6 +684,12 @@ function startTyperacerTick(room) {
     room.game = tickTyperacer(room.game);
     broadcastGameState(room);
     if (room.game.status === "racing" && room.game.timer <= 0) {
+      triggerTyperacerReveal(room);
+    } else if (
+      room.game.status === "racing" &&
+      room.game.closingCountdown !== null &&
+      room.game.closingCountdown <= 0
+    ) {
       triggerTyperacerReveal(room);
     } else if (room.game.status === "reveal" && room.game.timer <= 0) {
       stopLoop(room);
