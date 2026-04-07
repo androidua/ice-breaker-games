@@ -115,20 +115,27 @@ function updateProgress(state, playerId, typed) {
   if (current.finished) return state;
 
   const sanitised = String(typed).slice(0, state.paragraph.length + 10);
-  const finished = sanitised === state.paragraph;
+  const finished = sanitised.length >= state.paragraph.length;
   const finishTime = finished ? Date.now() : null;
-  const mistakes = finished ? countMistakes(sanitised, state.paragraph) : 0;
+  const mistakes = finished
+    ? countMistakes(sanitised.slice(0, state.paragraph.length), state.paragraph)
+    : 0;
 
   let wpm = 0;
   if (finished && finishTime) {
     const elapsedMinutes = (finishTime - state.raceStartTime) / 60000;
-    wpm = elapsedMinutes > 0 ? Math.round((state.paragraph.split(" ").length) / elapsedMinutes) : 0;
+    wpm = elapsedMinutes > 0 ? Math.round(state.paragraph.split(" ").length / elapsedMinutes) : 0;
   }
 
   const progress = new Map(state.progress);
   progress.set(playerId, { typed: sanitised, finished, finishTime, mistakes, wpm });
 
-  return { ...state, progress };
+  // Start 20s closing window when the first player finishes
+  const wasFirstFinish =
+    finished && !current.finished && [...state.progress.values()].every((p) => !p.finished);
+  const closingCountdown = wasFirstFinish ? 20 : state.closingCountdown;
+
+  return { ...state, progress, closingCountdown };
 }
 
 export function allTyperacerFinished(state) {
