@@ -222,6 +222,7 @@ export function serializeTyperacer(state) {
     progress: progressObj,
     scores: Object.fromEntries(state.scores),
     timer: state.timer,
+    closingCountdown: state.closingCountdown ?? null,
     round: state.round,
     roundWinnerId: state.roundWinnerId,
   };
