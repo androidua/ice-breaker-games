@@ -1,7 +1,7 @@
 const COMPOSE_DURATION = 45;
 const REVEAL_DURATION = 6;
 
-const PROMPTS = [
+const PROMPTS_RAW = [
   // Movies
   { text: "Jurassic Park", category: "Movie" },
   { text: "Star Wars", category: "Movie" },
@@ -170,6 +170,148 @@ const PROMPTS = [
   { text: "Vending Machine", category: "Phrase" },
   { text: "X Marks the Spot", category: "Phrase" },
 ];
+
+const EXTRA_PROMPTS = [
+  // Movies
+  { text: "Inception", category: "Movie" },
+  { text: "The Prestige", category: "Movie" },
+  { text: "The Social Network", category: "Movie" },
+  { text: "Mad Max Fury Road", category: "Movie" },
+  { text: "The Grand Budapest Hotel", category: "Movie" },
+  { text: "Whiplash", category: "Movie" },
+  { text: "La La Land", category: "Movie" },
+  { text: "Blade Runner", category: "Movie" },
+  { text: "Avatar", category: "Movie" },
+  { text: "The Martian", category: "Movie" },
+  { text: "Mission Impossible", category: "Movie" },
+  { text: "The Lego Movie", category: "Movie" },
+  { text: "How to Train Your Dragon", category: "Movie" },
+  { text: "Kung Fu Hustle", category: "Movie" },
+  { text: "The Princess Bride", category: "Movie" },
+  { text: "The Nightmare Before Christmas", category: "Movie" },
+
+  // TV Shows
+  { text: "The Last of Us", category: "TV Show" },
+  { text: "Wednesday", category: "TV Show" },
+  { text: "The Bear", category: "TV Show" },
+  { text: "The Boys", category: "TV Show" },
+  { text: "House of the Dragon", category: "TV Show" },
+  { text: "Only Murders in the Building", category: "TV Show" },
+  { text: "The Queen's Gambit", category: "TV Show" },
+  { text: "The Witcher", category: "TV Show" },
+  { text: "Westworld", category: "TV Show" },
+  { text: "The Big Bang Theory", category: "TV Show" },
+  { text: "How I Met Your Mother", category: "TV Show" },
+  { text: "The X-Files", category: "TV Show" },
+
+  // Events
+  { text: "Science Fair", category: "Event" },
+  { text: "Book Launch", category: "Event" },
+  { text: "Hackathon", category: "Event" },
+  { text: "Charity Run", category: "Event" },
+  { text: "Talent Competition", category: "Event" },
+  { text: "School Reunion", category: "Event" },
+  { text: "Camping Weekend", category: "Event" },
+  { text: "Beach Cleanup", category: "Event" },
+  { text: "Food Festival", category: "Event" },
+  { text: "Art Exhibition", category: "Event" },
+  { text: "Movie Premiere", category: "Event" },
+  { text: "Garden Party", category: "Event" },
+
+  // Phrases
+  { text: "Midnight Snack", category: "Phrase" },
+  { text: "Pocket Rocket", category: "Phrase" },
+  { text: "Lucky Charm", category: "Phrase" },
+  { text: "Brainstorm", category: "Phrase" },
+  { text: "Happy Camper", category: "Phrase" },
+  { text: "Cloud Nine", category: "Phrase" },
+  { text: "Secret Mission", category: "Phrase" },
+  { text: "Fast Lane", category: "Phrase" },
+  { text: "Frozen Lake", category: "Phrase" },
+  { text: "Treasure Map", category: "Phrase" },
+  { text: "Rocket Science", category: "Phrase" },
+  { text: "Magic Carpet", category: "Phrase" },
+  { text: "Lost and Found", category: "Phrase" },
+  { text: "Midday Nap", category: "Phrase" },
+  { text: "Open Secret", category: "Phrase" },
+  { text: "Dream Team", category: "Phrase" },
+  { text: "Roadside Diner", category: "Phrase" },
+  { text: "Moonlight Walk", category: "Phrase" },
+  { text: "Snow Day", category: "Phrase" },
+  { text: "Fire and Ice", category: "Phrase" },
+  { text: "Treasure Chest", category: "Phrase" },
+  { text: "Golden Hour", category: "Phrase" },
+  { text: "Late Checkout", category: "Phrase" },
+  { text: "Sunset Cruise", category: "Phrase" },
+  { text: "Pop Quiz", category: "Phrase" },
+  { text: "Top Secret", category: "Phrase" },
+  { text: "Picture Perfect", category: "Phrase" },
+  { text: "Weekend Getaway", category: "Phrase" },
+  { text: "Night Shift", category: "Phrase" },
+  { text: "Rain Check", category: "Phrase" },
+  { text: "Power Nap", category: "Phrase" },
+  { text: "Sweet Tooth", category: "Phrase" },
+  { text: "Wild Card", category: "Phrase" },
+  { text: "Lucky Break", category: "Phrase" },
+  { text: "Quiet Storm", category: "Phrase" },
+  { text: "Open Road", category: "Phrase" },
+  { text: "Final Countdown", category: "Phrase" },
+  { text: "Slam Dunk", category: "Phrase" },
+  { text: "Green Light", category: "Phrase" },
+  { text: "Blue Moon", category: "Phrase" },
+  { text: "Cold Start", category: "Phrase" },
+  { text: "Heat Wave", category: "Phrase" },
+  { text: "Double Shift", category: "Phrase" },
+  { text: "Fast Track", category: "Phrase" },
+  { text: "Merry Go Round", category: "Phrase" },
+  { text: "Light Bulb Moment", category: "Phrase" },
+  { text: "Mountain Trail", category: "Phrase" },
+  { text: "Summer Camp", category: "Phrase" },
+  { text: "Early Checkout", category: "Phrase" },
+  { text: "Treasure Dive", category: "Phrase" },
+  { text: "Ocean Breeze", category: "Phrase" },
+  { text: "Backstage Pass", category: "Phrase" },
+  { text: "Screen Time", category: "Phrase" },
+  { text: "Moon Mission", category: "Phrase" },
+  { text: "Fountain Pen", category: "Phrase" },
+  { text: "Busy Bee", category: "Phrase" },
+  { text: "Fresh Start", category: "Phrase" },
+  { text: "Night Market", category: "Phrase" },
+  { text: "Party Animal", category: "Phrase" },
+];
+
+function normalizePrompt(text) {
+  return String(text).trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function isValidPrompt(prompt) {
+  if (!prompt || typeof prompt.text !== "string" || typeof prompt.category !== "string") return false;
+  const text = prompt.text.trim();
+  const category = prompt.category.trim();
+  if (!text || text.length < 3 || text.length > 60) return false;
+  if (!category || category.length > 24) return false;
+  return true;
+}
+
+function buildPromptBank() {
+  const bank = [];
+  const seen = new Set();
+
+  const add = (prompt) => {
+    if (!isValidPrompt(prompt)) return;
+    const clean = { text: prompt.text.trim(), category: prompt.category.trim() };
+    const key = normalizePrompt(clean.text);
+    if (seen.has(key)) return;
+    seen.add(key);
+    bank.push(clean);
+  };
+
+  PROMPTS_RAW.forEach(add);
+  EXTRA_PROMPTS.forEach(add);
+  return bank;
+}
+
+const PROMPTS = buildPromptBank();
 
 function getGuessLimit(playerCount) {
   return playerCount === 2 ? 5 : 3;

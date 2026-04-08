@@ -186,3 +186,10 @@ For features the smoke test doesn't cover:
 - Open two browser tabs to simulate multiplayer (one hosts, one joins)
 - Test on both desktop and mobile (or use Chrome DevTools device mode)
 - Remember that Railway redeploys on every push, so broken code goes live immediately
+
+## Content Maintenance
+
+For static text bank reviews and expansions (Hot Take, Trivia, Emoji, Sketch, Type Racer), follow:
+- `docs/content-health-checklist.md`
+
+Invoke in AI sessions with: "Run the content health checklist in `docs/content-health-checklist.md`."

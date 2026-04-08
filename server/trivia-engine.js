@@ -3,7 +3,7 @@ const REVEAL_DURATION = 5;
 const ROUND_COMPLETE_DURATION = 5;
 const TOTAL_QUESTIONS = 10;
 
-const QUESTION_BANK = [
+const QUESTION_BANK_RAW = [
   { q: "What planet is known as the Red Planet?", o: ["Venus", "Mars", "Jupiter", "Saturn"], c: 1 },
   { q: "What is the largest ocean on Earth?", o: ["Atlantic", "Indian", "Arctic", "Pacific"], c: 3 },
   { q: "Who painted the Mona Lisa?", o: ["Michelangelo", "Da Vinci", "Raphael", "Rembrandt"], c: 1 },
@@ -341,6 +341,136 @@ const QUESTION_BANK = [
   { q: "Which country has won the most FIFA World Cups?", o: ["Germany", "Argentina", "Italy", "Brazil"], c: 3 },
   { q: "In tennis, what is the term for a score of 40-40?", o: ["Tie", "Deuce", "Advantage", "Set point"], c: 1 },
 ];
+
+const EXTRA_QUESTIONS = [
+  { q: "What is the capital of New Zealand?", o: ["Auckland", "Wellington", "Christchurch", "Hamilton"], c: 1 },
+  { q: "What is the capital of Argentina?", o: ["Lima", "Bogota", "Buenos Aires", "Santiago"], c: 2 },
+  { q: "Which country is famous for the city of Venice?", o: ["Spain", "Italy", "France", "Portugal"], c: 1 },
+  { q: "Which continent is Kenya in?", o: ["Asia", "Europe", "Africa", "South America"], c: 2 },
+  { q: "What is the largest island in the world?", o: ["Borneo", "Madagascar", "Greenland", "Iceland"], c: 2 },
+  { q: "What is H2SO4 commonly known as?", o: ["Hydrochloric acid", "Sulfuric acid", "Nitric acid", "Acetic acid"], c: 1 },
+  { q: "How many planets are in our solar system?", o: ["7", "8", "9", "10"], c: 1 },
+  { q: "What is the freezing point of water in Celsius?", o: ["-10", "-5", "0", "5"], c: 2 },
+  { q: "What is the largest planet in our solar system?", o: ["Earth", "Saturn", "Jupiter", "Neptune"], c: 2 },
+  { q: "What does DNA stand for?", o: ["Deoxyribonucleic Acid", "Dynamic Nuclear Acid", "Double Nitrogen Atom", "Dual Nucleic Array"], c: 0 },
+  { q: "Which instrument has 88 keys?", o: ["Guitar", "Piano", "Violin", "Flute"], c: 1 },
+  { q: "How many strings does a standard violin have?", o: ["3", "4", "5", "6"], c: 1 },
+  { q: "Which artist painted Starry Night?", o: ["Picasso", "Monet", "Van Gogh", "Rembrandt"], c: 2 },
+  { q: "Who wrote The Odyssey?", o: ["Homer", "Virgil", "Plato", "Socrates"], c: 0 },
+  { q: "Who wrote Macbeth?", o: ["Marlowe", "Shakespeare", "Chaucer", "Shelley"], c: 1 },
+  { q: "How many minutes are in an hour?", o: ["45", "50", "60", "75"], c: 2 },
+  { q: "How many days are in a leap year?", o: ["364", "365", "366", "367"], c: 2 },
+  { q: "What is 9 multiplied by 7?", o: ["56", "63", "72", "81"], c: 1 },
+  { q: "How many sides does an octagon have?", o: ["6", "7", "8", "9"], c: 2 },
+  { q: "What is 100 divided by 4?", o: ["20", "25", "40", "50"], c: 1 },
+  { q: "What is the largest continent by area?", o: ["Africa", "Europe", "Asia", "North America"], c: 2 },
+  { q: "What is the capital of Norway?", o: ["Oslo", "Stockholm", "Helsinki", "Copenhagen"], c: 0 },
+  { q: "Which ocean is on the west coast of the United States?", o: ["Atlantic", "Pacific", "Indian", "Arctic"], c: 1 },
+  { q: "Which desert is in northern Africa?", o: ["Gobi", "Sahara", "Atacama", "Kalahari"], c: 1 },
+  { q: "What is the national currency of the UK?", o: ["Euro", "Dollar", "Pound Sterling", "Franc"], c: 2 },
+  { q: "What is the largest internal organ in the human body?", o: ["Heart", "Liver", "Lung", "Kidney"], c: 1 },
+  { q: "Which blood type is known as the universal donor?", o: ["AB+", "O-", "A+", "B-"], c: 1 },
+  { q: "What does CPU stand for in computing?", o: ["Central Processing Unit", "Computer Program Unit", "Core Program Utility", "Central Power Unit"], c: 0 },
+  { q: "What is the binary value of decimal 2?", o: ["01", "10", "11", "100"], c: 1 },
+  { q: "What protocol is used for secure websites?", o: ["HTTP", "FTP", "HTTPS", "SSH"], c: 2 },
+  { q: "Which company created the Windows operating system?", o: ["Apple", "Microsoft", "IBM", "Google"], c: 1 },
+  { q: "What does RAM stand for?", o: ["Random Access Memory", "Read Access Module", "Rapid Array Memory", "Run Active Memory"], c: 0 },
+  { q: "Who was the first president of South Africa elected in a fully representative democratic election?", o: ["Nelson Mandela", "F. W. de Klerk", "Desmond Tutu", "Thabo Mbeki"], c: 0 },
+  { q: "In what year did the Apollo 11 moon landing happen?", o: ["1967", "1968", "1969", "1970"], c: 2 },
+  { q: "Which wall divided Berlin until 1989?", o: ["Iron Wall", "Berlin Wall", "Eastern Wall", "Cold Wall"], c: 1 },
+  { q: "Who was known for the theory of relativity?", o: ["Newton", "Einstein", "Tesla", "Bohr"], c: 1 },
+  { q: "Which country was the first to host the modern Olympics in 1896?", o: ["France", "UK", "Greece", "Italy"], c: 2 },
+  { q: "How many players are on a standard soccer team on the field?", o: ["9", "10", "11", "12"], c: 2 },
+  { q: "How many minutes are in a standard soccer match (without extra time)?", o: ["80", "85", "90", "95"], c: 2 },
+  { q: "In baseball, how many strikes make an out?", o: ["2", "3", "4", "5"], c: 1 },
+  { q: "Which country hosts Wimbledon?", o: ["USA", "Australia", "France", "United Kingdom"], c: 3 },
+  { q: "Which chess piece can move in an L shape?", o: ["Bishop", "Knight", "Rook", "Queen"], c: 1 },
+  { q: "What is the name of the toy cowboy in Toy Story?", o: ["Buzz", "Woody", "Rex", "Hamm"], c: 1 },
+  { q: "Which movie features the character Jack Sparrow?", o: ["Indiana Jones", "Pirates of the Caribbean", "The Mummy", "Treasure Planet"], c: 1 },
+  { q: "Who directed E.T. the Extra-Terrestrial?", o: ["James Cameron", "Steven Spielberg", "Ridley Scott", "George Lucas"], c: 1 },
+  { q: "Which singer is known as the King of Pop?", o: ["Prince", "Michael Jackson", "Elvis Presley", "David Bowie"], c: 1 },
+  { q: "Which Beatles album includes Come Together?", o: ["Abbey Road", "Revolver", "Help", "Rubber Soul"], c: 0 },
+  { q: "What is the opposite of transparent?", o: ["Opaque", "Reflective", "Glossy", "Bright"], c: 0 },
+  { q: "What color do you get when you mix blue and yellow?", o: ["Purple", "Orange", "Green", "Brown"], c: 2 },
+  { q: "How many months have 31 days?", o: ["5", "6", "7", "8"], c: 2 },
+  { q: "What is the largest type of big cat?", o: ["Lion", "Tiger", "Leopard", "Jaguar"], c: 1 },
+  { q: "Which bird cannot fly?", o: ["Eagle", "Parrot", "Penguin", "Falcon"], c: 2 },
+  { q: "What do bees primarily collect from flowers?", o: ["Salt", "Pollen and nectar", "Dirt", "Seeds"], c: 1 },
+  { q: "Which planet is known for its rings?", o: ["Mars", "Saturn", "Venus", "Mercury"], c: 1 },
+  { q: "What is the boiling point of water in Fahrenheit?", o: ["180", "200", "212", "230"], c: 2 },
+  { q: "What organ helps you breathe?", o: ["Liver", "Lungs", "Kidneys", "Pancreas"], c: 1 },
+  { q: "How many letters are in the English alphabet?", o: ["24", "25", "26", "27"], c: 2 },
+  { q: "What is the first month of the year?", o: ["December", "January", "February", "March"], c: 1 },
+  { q: "How many days are there in a week?", o: ["5", "6", "7", "8"], c: 2 },
+  { q: "What shape has three sides?", o: ["Square", "Triangle", "Circle", "Hexagon"], c: 1 },
+  { q: "Which is a primary color?", o: ["Green", "Purple", "Red", "Orange"], c: 2 },
+  { q: "What instrument measures temperature?", o: ["Barometer", "Thermometer", "Altimeter", "Compass"], c: 1 },
+  { q: "What gas do humans need to breathe?", o: ["Hydrogen", "Carbon Dioxide", "Oxygen", "Helium"], c: 2 },
+  { q: "Which planet is often called the blue planet?", o: ["Earth", "Neptune", "Uranus", "Mars"], c: 0 },
+  { q: "What is 5 squared?", o: ["10", "15", "20", "25"], c: 3 },
+  { q: "What is 50 percent of 80?", o: ["30", "35", "40", "45"], c: 2 },
+  { q: "How many centimeters are in one meter?", o: ["10", "50", "100", "1000"], c: 2 },
+  { q: "What does WWW stand for?", o: ["World Wide Web", "World Wire Web", "Wide World Web", "Web Wide World"], c: 0 },
+  { q: "Which device points and clicks on a desktop computer?", o: ["Keyboard", "Mouse", "Scanner", "Speaker"], c: 1 },
+  { q: "What is the largest moon of Saturn?", o: ["Europa", "Titan", "Io", "Ganymede"], c: 1 },
+  { q: "Which country is famous for maple syrup?", o: ["USA", "Canada", "Sweden", "Finland"], c: 1 },
+  { q: "What is the capital of Portugal?", o: ["Lisbon", "Porto", "Madrid", "Valencia"], c: 0 },
+  { q: "What is the capital of Ireland?", o: ["Galway", "Dublin", "Cork", "Limerick"], c: 1 },
+];
+
+const DISALLOWED_QUESTION_PATTERNS = [
+  /most popular programming language in 2025/i,
+  /who is the ceo of tesla/i,
+  /what colour is the twitter\/x bird logo/i,
+  /what was the last country to abolish slavery/i,
+  /what is the most eaten food in the world/i,
+  /what colour is associated with the impressionist painter claude monet/i,
+  /what is the highest-grossing film of all time \(adjusted for inflation\)/i,
+  /who has won the most grand slam tennis titles \(men's\)/i,
+];
+
+function normalizeQuestionText(question) {
+  return String(question).trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function isValidQuestion(question) {
+  if (!question || typeof question.q !== "string" || !Array.isArray(question.o)) return false;
+  const text = question.q.trim();
+  if (text.length < 8 || text.length > 160) return false;
+  if (question.o.length !== 4) return false;
+  if (typeof question.c !== "number" || question.c < 0 || question.c > 3) return false;
+
+  const options = question.o.map((opt) => String(opt).trim());
+  if (options.some((opt) => opt.length === 0 || opt.length > 80)) return false;
+  if (new Set(options.map((opt) => opt.toLowerCase())).size !== 4) return false;
+  if (DISALLOWED_QUESTION_PATTERNS.some((pattern) => pattern.test(text))) return false;
+
+  return true;
+}
+
+function buildQuestionBank() {
+  const bank = [];
+  const seen = new Set();
+
+  const add = (question) => {
+    if (!isValidQuestion(question)) return;
+    const clean = {
+      q: question.q.trim(),
+      o: question.o.map((opt) => String(opt).trim()),
+      c: question.c,
+    };
+    const key = normalizeQuestionText(clean.q);
+    if (seen.has(key)) return;
+    seen.add(key);
+    bank.push(clean);
+  };
+
+  QUESTION_BANK_RAW.forEach(add);
+  EXTRA_QUESTIONS.forEach(add);
+  return bank;
+}
+
+const QUESTION_BANK = buildQuestionBank();
 
 function pickUnusedQuestions(usedIndices, rng, count = TOTAL_QUESTIONS) {
   let available = QUESTION_BANK.map((_, i) => i).filter((i) => !usedIndices.has(i));

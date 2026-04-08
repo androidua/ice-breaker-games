@@ -1,7 +1,7 @@
 const DRAW_DURATION = 45;
 const REVEAL_DURATION = 6;
 
-const WORDS = [
+const WORDS_RAW = [
   // Animals
   "cat", "dog", "fish", "penguin", "dragon", "dinosaur", "butterfly",
   "elephant", "giraffe", "octopus", "shark", "whale", "spider", "turtle",
@@ -82,6 +82,76 @@ const WORDS = [
   "flash mob", "escape room", "virtual reality",
   "photo bomb", "live stream", "crowdfunding",
 ];
+
+const EXTRA_WORDS = [
+  "scooter", "roller skates", "fountain", "picnic basket", "suitcase", "camping stove",
+  "headphones", "smart watch", "bookmark", "notebook", "shopping cart", "mailbox",
+  "traffic light", "stop sign", "laptop stand", "headlamp", "sleeping bag", "tent pole",
+  "paint brush", "paint palette", "film camera", "drone", "tripod", "megaphone",
+  "watering can", "sunflower", "rose", "oak tree", "palm leaf", "coconut",
+  "sandcastle", "lifeboat", "surfboard", "wetsuit", "diving mask", "snorkel",
+  "skate park", "arcade machine", "pinball", "ticket booth", "ferris wheel", "carousel",
+  "treasure map", "compass rose", "pirate ship", "captain hat", "spyglass", "message in a bottle",
+  "birthday candles", "party hat", "gift box", "confetti", "balloon bouquet", "streamers",
+  "snow globe", "igloo village", "sled", "ski lift", "ice cave", "penguin colony",
+  "jungle temple", "volcano island", "desert caravan", "oasis palm", "canyon bridge", "waterfall cave",
+  "space station", "astronaut helmet", "moon rover", "satellite", "alien", "laser beam",
+  "robot dog", "flying car", "hoverboard", "time machine", "portal", "hologram",
+  "chef hat", "mixing bowl", "rolling pin", "cutting board", "frying pan", "toaster",
+  "bento box", "bubble tea", "cupcake tower", "waffle cone", "pretzel stand", "taco truck",
+  "soccer goal", "basketball hoop", "baseball glove", "tennis racket", "bow and arrow", "hockey stick",
+  "race track", "finish line", "gold medal", "scoreboard", "whistle", "referee",
+  "detective hat", "magnifying glass", "fingerprint", "crime scene", "secret code", "locked door",
+  "wizard tower", "spell scroll", "dragon egg", "enchanted forest", "magic portal", "crystal cave",
+  "haunted mansion", "ghost train", "pumpkin lantern", "spider web", "bat cave", "graveyard",
+  "library card", "book shelf", "reading lamp", "study desk", "school bus", "playground",
+  "music note", "piano", "violin", "drum set", "microphone stand", "concert stage",
+  "movie camera", "director chair", "clapperboard", "red carpet", "award trophy", "spotlight",
+  "city skyline", "subway train", "crosswalk", "coffee shop", "food stall", "street mural",
+  "farm tractor", "barn door", "hay bale", "chicken coop", "wind turbine", "solar panel",
+  "doctor bag", "stethoscope", "ambulance siren", "hospital bed", "x ray", "first aid kit",
+  "firefighter helmet", "fire hydrant", "ladder truck", "smoke alarm", "rescue rope", "safety cone",
+  "campfire guitar", "marshmallow", "hiking boots", "trail sign", "binoculars", "map pin",
+  "cloud", "rain cloud", "sun", "moon", "thunderbolt", "rain puddle",
+  "paper airplane", "origami crane", "kite string", "yo yo trick", "chess board", "puzzle piece",
+  "treasure chest room", "secret tunnel", "hidden key", "escape plan", "trap door", "laser maze",
+  "pizza slice", "burger combo", "sushi platter", "ramen bowl", "pancake stack", "ice cream cart",
+  "parade float", "marching band", "street dancer", "fireworks show", "festival gate", "food court",
+  "beach umbrella", "lifeguard chair", "seashell", "sand dune", "wave", "boat dock",
+  "mountain cabin", "snow peak", "pine forest", "river raft", "rock cliff", "camp trail",
+  "game controller", "joystick", "virtual headset", "pixel heart", "high score", "loading bar",
+];
+
+function normalizeWord(word) {
+  return String(word).trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function isValidWord(word) {
+  const text = String(word).trim();
+  if (!text || text.length < 2 || text.length > 40) return false;
+  if (!/[a-z]/i.test(text)) return false;
+  return true;
+}
+
+function buildWordBank() {
+  const bank = [];
+  const seen = new Set();
+
+  const add = (word) => {
+    if (!isValidWord(word)) return;
+    const clean = String(word).trim();
+    const key = normalizeWord(clean);
+    if (seen.has(key)) return;
+    seen.add(key);
+    bank.push(clean);
+  };
+
+  WORDS_RAW.forEach(add);
+  EXTRA_WORDS.forEach(add);
+  return bank;
+}
+
+const WORDS = buildWordBank();
 
 function fisherYates(arr, rng) {
   const a = [...arr];
