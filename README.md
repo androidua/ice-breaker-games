@@ -9,12 +9,13 @@ A collection of real-time multiplayer icebreaker games for up to 8 players. Host
 **Included games:**
 - **Snake Arena** — Classic multiplayer snake. Eat food, grow, outlast opponents.
 - **Bomber Arena** — Bomberman-style free-for-all. Drop bombs, chain explosions, collect power-ups.
-- **Type Racer** — Race to type a paragraph fastest. Errors must be corrected before you advance.
+- **Type Racer** — Race to type a paragraph fastest. Mistakes lower points but do not block finishing.
 - **Word Chain** — Each word must start with the last letter of the previous. Too slow? You're eliminated.
 - **Two Truths & a Lie** — One player writes three statements. Others guess which is the lie.
 - **Emoji Storytelling** — Describe a movie/phrase using only emojis. Others guess the answer.
 - **Sketch & Guess** — One player draws a secret word. First to guess correctly wins the round.
 - **Speed Trivia** — Timed multiple-choice questions. Faster correct answers earn more points.
+- **Hot Take Voting** — Vote agree/disagree on spicy prompts. Match the majority to score.
 
 ---
 
@@ -370,13 +371,29 @@ Formula: `points = ceil((time_remaining / 15) × 1000)`, minimum 100.
 
 ---
 
+### Hot Take Voting
+
+**How it works:** Each round shows one hot take prompt. Everyone votes **Agree** or **Disagree** before the timer ends. Votes are locked after submission.
+
+**Scoring:**
+- If your vote matches the round majority → **+1 point**
+- If it's a tie (equal agree/disagree) → **0 points for everyone**
+
+**Winning a round:** Players on the majority side are considered round winners.
+
+**Prompt variety:** Uses a bank of **300 unique static prompts**, shuffled at game start and reshuffled after the pool is exhausted to reduce repeats for frequent players.
+
+**Timer:** 15s voting + 5s reveal. The host can click **Skip** during the voting phase.
+
+---
+
 ## Host Controls & Leaderboards
 
 **Host controls (available to the room creator):**
 - **Start Games** — begins the first voting round from the lobby
 - **End Game** — ends the current game, awards a game win to the leading player, and returns to voting
 - **Next Round** (Snake, Bomber) — starts a new round after one ends
-- **Skip** (Truths, Emoji, Sketch, TypeRacer) — force-advances a stuck phase
+- **Skip** (Truths, Emoji, Sketch, Type Racer, Hot Take Voting) — force-advances a stuck phase
 - **Start Next Set** (Trivia only) — begins the next 10-question set after a round completes
 
 **Two-tier leaderboard:**
@@ -430,7 +447,8 @@ ice-breaker-games/
 │       ├── TruthsGame.jsx
 │       ├── EmojiGame.jsx
 │       ├── SketchGame.jsx
-│       └── TriviaGame.jsx
+│       ├── TriviaGame.jsx
+│       └── HotTakeVotingGame.jsx
 ├── server/                 # Backend (Node.js + ws)
 │   ├── index.js            # HTTP + WebSocket server, room management
 │   ├── engine.js           # Snake game engine
@@ -441,7 +459,8 @@ ice-breaker-games/
 │   ├── truths-engine.js    # Two Truths & a Lie engine
 │   ├── emoji-engine.js     # Emoji Storytelling engine
 │   ├── sketch-engine.js    # Sketch & Guess engine
-│   └── trivia-engine.js    # Speed Trivia engine
+│   ├── trivia-engine.js    # Speed Trivia engine
+│   └── hottake-engine.js   # Hot Take Voting engine
 └── package.json
 ```
 

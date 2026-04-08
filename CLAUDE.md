@@ -1,8 +1,8 @@
 # Huddle Play Room
 
-Real-time multiplayer party game platform with eight browser-based games. Designed for phones and desktops, played over WebSocket. All state lives in-memory on the server; there is no database.
+Real-time multiplayer party game platform with nine browser-based games. Designed for phones and desktops, played over WebSocket. All state lives in-memory on the server; there is no database.
 
-**Live at:** [ice-breaker-games-production.up.railway.app](https://ice-breaker-games-production.up.railway.app/)
+**Live at:** [huddleplayroom.com](https://huddleplayroom.com/)
 
 ## Commands
 
@@ -80,6 +80,7 @@ Each game has a **pure engine module** (no side effects, no timers, no WebSocket
 | `bomber-engine.js` | Bomber Arena | `createBomberState()`, `handleBomberAction()`, `stepBomber()`, `tickBomberTimer()` |
 | `typeracer-engine.js` | Type Racer | `createTyperacerState()`, `handleTyperacerAction()`, `tickTyperacer()` |
 | `wordchain-engine.js` | Word Chain | `createWordChainState()`, `handleWordChainAction()`, `tickWordChain()` |
+| `hottake-engine.js` | Hot Take Voting | `createHotTakeState()`, `handleHotTakeAction()`, `tickHotTake()` |
 | `voting-engine.js` | Game voting phase | `createVotingState()`, `submitVote()`, `resolveVoting()` |
 
 `words-en.txt` is a bundled 172k-word English dictionary (ENABLE2k, public domain) used by `wordchain-engine.js` for word validation. Loaded once at startup into a Set.
