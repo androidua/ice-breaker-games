@@ -9,6 +9,7 @@ import TriviaGame from "./games/TriviaGame.jsx";
 import TyperacerGame from "./games/TyperacerGame.jsx";
 import WordChainGame from "./games/WordChainGame.jsx";
 import BomberGame from "./games/BomberGame.jsx";
+import HotTakeVotingGame from "./games/HotTakeVotingGame.jsx";
 
 function getWsUrl() {
   const isDev = window.location.port.startsWith("517");
@@ -25,7 +26,7 @@ const KEY_TO_DIR = {
 
 const GAME_COMPONENTS = {
   snake: SnakeGame, truths: TruthsGame, emoji: EmojiGame,
-  sketch: SketchGame, trivia: TriviaGame, typeracer: TyperacerGame, wordchain: WordChainGame, bomber: BomberGame,
+  sketch: SketchGame, trivia: TriviaGame, typeracer: TyperacerGame, wordchain: WordChainGame, bomber: BomberGame, hottake: HotTakeVotingGame,
 };
 
 const GAME_LABELS = {
@@ -34,6 +35,7 @@ const GAME_LABELS = {
   typeracer: "Type Racer",
   wordchain: "Word Chain",
   bomber: "Bomber Arena",
+  hottake: "Hot Take Voting",
 };
 
 export default function App() {

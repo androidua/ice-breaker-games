@@ -12,6 +12,7 @@ import { createTriviaState, handleTriviaAction, allAnswered, revealTrivia, nextT
 import { createTyperacerState, handleTyperacerAction, allTyperacerFinished, revealTyperacer, nextTyperacerRound, tickTyperacer, serializeTyperacer } from "./typeracer-engine.js";
 import { createWordChainState, handleWordChainAction, eliminateCurrentPlayer, nextWordChainRound, tickWordChain, serializeWordChain } from "./wordchain-engine.js";
 import { createBomberState, handleBomberAction, applyImmediateMove, stepBomber, tickBomberTimer, nextBomberRound, serializeBomber, TICK_MS as BOMBER_TICK_MS } from "./bomber-engine.js";
+import { createHotTakeState, handleHotTakeAction, allHotTakeVotesIn, revealHotTake, nextHotTakeRound, tickHotTake, serializeHotTake } from "./hottake-engine.js";
 
 const PORT = Number(process.env.PORT || process.env.SNAKE_WS_PORT || 3000);
 const SNAKE_TICK_MS = 120;
@@ -264,6 +265,11 @@ function handleSkipPhase(clientId) {
         startNextBomberRound(room);
       }
       break;
+    case "hottake":
+      if (room.game.status === "voting") {
+        triggerHotTakeReveal(room);
+      }
+      break;
   }
 }
 
@@ -365,6 +371,7 @@ function startSelectedGame(room, gameName) {
     case "typeracer":  startTyperacerGame(room, players); break;
     case "wordchain":  startWordChainGame(room, players); break;
     case "bomber":     startBomberGame(room, players); break;
+    case "hottake":    startHotTakeGame(room, players); break;
   }
 
   sendRoomUpdate(room);
@@ -433,6 +440,14 @@ function handleGameAction(ws, clientId, action) {
     case "bomber":
       room.game = handleBomberAction(room.game, clientId, action);
       // No broadcast here — state is broadcast on every tick
+      break;
+    case "hottake":
+      room.game = handleHotTakeAction(room.game, clientId, action);
+      if (room.game.status === "voting" && allHotTakeVotesIn(room.game)) {
+        triggerHotTakeReveal(room);
+      } else {
+        broadcastGameState(room);
+      }
       break;
   }
 }
@@ -762,6 +777,39 @@ function startNextBomberRound(room) {
   startBomberLoop(room);
 }
 
+// ── Hot Take Voting ──────────────────────────────────────────────
+
+function startHotTakeGame(room, players) {
+  room.game = createHotTakeState({ players, rng: Math.random });
+  broadcastGameState(room);
+  startHotTakeTick(room);
+}
+
+function startHotTakeTick(room) {
+  stopLoop(room);
+  room.interval = setInterval(() => {
+    room.game = tickHotTake(room.game);
+    broadcastGameState(room);
+
+    if (room.game.status === "voting" && room.game.timer <= 0) {
+      triggerHotTakeReveal(room);
+    } else if (room.game.status === "reveal" && room.game.timer <= 0) {
+      stopLoop(room);
+      awardRoundWin(room, room.game.roundWinnerId);
+      room.game = nextHotTakeRound(room.game, Math.random);
+      broadcastGameState(room);
+      startHotTakeTick(room);
+    }
+  }, 1000);
+}
+
+function triggerHotTakeReveal(room) {
+  stopLoop(room);
+  room.game = revealHotTake(room.game);
+  broadcastGameState(room);
+  startHotTakeTick(room);
+}
+
 // ── Word Chain ───────────────────────────────────────────────────
 
 function startWordChainGame(room, players) {
@@ -836,6 +884,9 @@ function broadcastGameState(room) {
       break;
     case "bomber":
       broadcast(room, { type: "state", state: serializeBomber(room.game) });
+      break;
+    case "hottake":
+      broadcast(room, { type: "state", state: serializeHotTake(room.game) });
       break;
   }
 }

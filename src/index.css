@@ -1014,6 +1014,43 @@ button:disabled {
   background: #fef0ee;
 }
 
+/* ── Hot Take Voting ──────────────────────────────────────── */
+
+.hottake-panel {
+  max-width: 640px;
+}
+
+.hottake-prompt {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+  padding: 10px;
+  border: 1px solid #c8bca7;
+  background: #f7f3ea;
+}
+
+.hottake-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.hottake-btn {
+  padding: 14px 12px;
+  font-size: 14px;
+  border: 2px solid #b6a88f;
+}
+
+.hottake-btn:hover:not(:disabled) {
+  border-color: #2a2a2a;
+}
+
+.hottake-selected {
+  border-color: #3d5a80;
+  background: #eaf0f7;
+}
+
 /* ── Responsive ───────────────────────────────────────────── */
 
 @media (max-width: 720px) {
@@ -1063,6 +1100,14 @@ button:disabled {
 
   /* Trivia answer buttons need a bit more breathing room */
   .trivia-option {
+    padding: 16px 14px;
+  }
+
+  .hottake-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .hottake-btn {
     padding: 16px 14px;
   }
 

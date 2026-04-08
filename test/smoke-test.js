@@ -209,8 +209,8 @@ async function runTests() {
     const hostVoteState = await host.waitFor("vote_state");
     assert(!!hostVoteState.voting, "Host receives initial voting state");
     assert(
-      hostVoteState.voting.availableGames.length === 8,
-      "8 games are available for voting"
+      hostVoteState.voting.availableGames.length === 9,
+      "9 games are available for voting"
     );
 
     // Player 2 also gets vote_state
