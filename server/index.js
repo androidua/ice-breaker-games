@@ -1,6 +1,6 @@
 import { createServer } from "http";
 import { readFileSync, existsSync } from "fs";
-import { join, extname } from "path";
+import { join, extname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { WebSocketServer } from "ws";
 import { createGameState, setSnakeDirection, stepGame } from "./engine.js";
@@ -59,19 +59,25 @@ function applySecurityHeaders(res) {
 const httpServer = createServer((req, res) => {
   const host = (req.headers.host || "").split(":")[0];
   if (host && host !== CANONICAL_HOST && host !== "localhost") {
+    applySecurityHeaders(res);
     res.writeHead(301, { Location: `https://${CANONICAL_HOST}${req.url}` });
     res.end();
     return;
   }
+  applySecurityHeaders(res);
   if (!HAS_DIST) {
-    applySecurityHeaders(res);
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end("<html><body><h2>Game server is running.</h2><p>Run <code>npm run build</code> first, or use <code>npm run dev</code> for development.</p></body></html>");
     return;
   }
-  let filePath = join(DIST_DIR, req.url === "/" ? "index.html" : req.url);
+  const filePath = resolve(join(DIST_DIR, req.url === "/" ? "index.html" : req.url));
+  // Prevent path traversal — resolved path must stay inside DIST_DIR
+  if (!filePath.startsWith(DIST_DIR)) {
+    res.writeHead(400);
+    res.end("Bad request");
+    return;
+  }
   const ext = extname(filePath);
-  applySecurityHeaders(res);
   if (CACHEABLE_EXTS.has(ext)) {
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
   } else {

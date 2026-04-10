@@ -15,8 +15,9 @@ function getWsUrl() {
   const isDev = window.location.port.startsWith("517");
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const host = window.location.hostname;
-  const port = isDev ? 3000 : window.location.port;
-  return `${protocol}//${host}:${port}`;
+  if (isDev) return `${protocol}//${host}:3000`;
+  const port = window.location.port;
+  return port ? `${protocol}//${host}:${port}` : `${protocol}//${host}`;
 }
 
 const KEY_TO_DIR = {
@@ -61,7 +62,8 @@ export default function App() {
     ws.addEventListener("error", () => setConnection("error"));
 
     ws.addEventListener("message", (event) => {
-      const msg = JSON.parse(event.data);
+      let msg;
+      try { msg = JSON.parse(event.data); } catch { return; }
       switch (msg.type) {
         case "welcome":
           setMe({ id: msg.id });
