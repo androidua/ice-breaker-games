@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, Component } from "react";
 import Lobby from "./Lobby.jsx";
 import VotingPhase from "./VotingPhase.jsx";
 import SnakeGame from "./games/SnakeGame.jsx";
@@ -38,6 +38,21 @@ const GAME_LABELS = {
   bomber: "Bomber Arena",
   hottake: "Hot Take Voting",
 };
+
+class ErrorBoundary extends Component {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="error-boundary">
+          Something went wrong. Please refresh the page.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function App() {
   const wsRef = useRef(null);
@@ -163,7 +178,9 @@ export default function App() {
       )}
 
       {room && room.status === "playing" && GameComponent && (
-        <GameComponent game={game} room={room} me={me} send={send} />
+        <ErrorBoundary>
+          <GameComponent game={game} room={room} me={me} send={send} />
+        </ErrorBoundary>
       )}
 
       <footer className="footer">

@@ -297,6 +297,14 @@ button:disabled {
   letter-spacing: 0.06em;
 }
 
+.error-boundary {
+  padding: 32px 16px;
+  text-align: center;
+  color: #c04b3a;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+}
+
 .end-game-btn {
   font-size: 11px;
   padding: 4px 8px;

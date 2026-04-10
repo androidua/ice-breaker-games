@@ -1,7 +1,8 @@
 import { createServer } from "http";
-import { readFileSync, existsSync } from "fs";
+import { readFile, existsSync } from "fs";
 import { join, extname, resolve } from "path";
 import { fileURLToPath } from "url";
+import { gzip } from "zlib";
 import { WebSocketServer } from "ws";
 import { createGameState, setSnakeDirection, stepGame } from "./engine.js";
 import { createVotingState, submitVote, tickVoting, allVotesIn, resolveVoting, serializeVoting } from "./voting-engine.js";
@@ -48,12 +49,36 @@ const CANONICAL_HOST = "huddleplayroom.com";
 // Assets with Vite-hashed filenames can be cached indefinitely.
 const CACHEABLE_EXTS = new Set([".js", ".css", ".woff", ".woff2", ".png", ".jpg", ".svg", ".ico"]);
 
+// Extensions whose content compresses well (text-based).
+const COMPRESSIBLE_EXTS = new Set([".html", ".js", ".css", ".json", ".svg"]);
+
 function applySecurityHeaders(res) {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "SAMEORIGIN");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://huddleplayroom.com ws://localhost:*; img-src 'self' data:");
+}
+
+function sendCompressed(req, res, statusCode, contentType, ext, data) {
+  const acceptsGzip = (req.headers["accept-encoding"] || "").includes("gzip");
+  if (acceptsGzip && COMPRESSIBLE_EXTS.has(ext)) {
+    gzip(data, (err, compressed) => {
+      if (err) {
+        res.writeHead(statusCode, { "Content-Type": contentType });
+        res.end(data);
+      } else {
+        res.setHeader("Content-Encoding", "gzip");
+        res.setHeader("Vary", "Accept-Encoding");
+        res.writeHead(statusCode, { "Content-Type": contentType });
+        res.end(compressed);
+      }
+    });
+  } else {
+    res.writeHead(statusCode, { "Content-Type": contentType });
+    res.end(data);
+  }
 }
 
 const httpServer = createServer((req, res) => {
@@ -71,7 +96,6 @@ const httpServer = createServer((req, res) => {
     return;
   }
   const filePath = resolve(join(DIST_DIR, req.url === "/" ? "index.html" : req.url));
-  // Prevent path traversal — resolved path must stay inside DIST_DIR
   if (!filePath.startsWith(DIST_DIR)) {
     res.writeHead(400);
     res.end("Bad request");
@@ -83,20 +107,21 @@ const httpServer = createServer((req, res) => {
   } else {
     res.setHeader("Cache-Control", "no-cache");
   }
-  try {
-    const data = readFileSync(filePath);
-    res.writeHead(200, { "Content-Type": MIME_TYPES[ext] || "application/octet-stream" });
-    res.end(data);
-  } catch {
-    try {
-      const html = readFileSync(join(DIST_DIR, "index.html"));
-      res.writeHead(200, { "Content-Type": "text/html" });
-      res.end(html);
-    } catch {
-      res.writeHead(404);
-      res.end("Not found");
+  readFile(filePath, (err, data) => {
+    if (!err) {
+      sendCompressed(req, res, 200, MIME_TYPES[ext] || "application/octet-stream", ext, data);
+      return;
     }
-  }
+    // SPA fallback — serve index.html for unmatched routes
+    readFile(join(DIST_DIR, "index.html"), (err2, html) => {
+      if (!err2) {
+        sendCompressed(req, res, 200, "text/html", ".html", html);
+      } else {
+        res.writeHead(404);
+        res.end("Not found");
+      }
+    });
+  });
 });
 
 const rooms = new Map();
@@ -120,6 +145,7 @@ function isRateLimited(clientId) {
 
 const wss = new WebSocketServer({
   server: httpServer,
+  maxPayload: 16 * 1024, // 16 KB — no legitimate game message is larger
   verifyClient: ({ origin }) => {
     if (!origin) return true; // server-to-server, health checks
     return origin === `https://${CANONICAL_HOST}` || origin.includes("localhost");
@@ -1003,3 +1029,21 @@ httpServer.listen(PORT, () => {
     console.log("For development, use 'npm run dev' in a separate terminal.");
   }
 });
+
+// ── Graceful shutdown ────────────────────────────────────────────
+// Railway sends SIGTERM on redeploy. Notify connected players and
+// drain connections instead of severing them mid-game.
+function gracefulShutdown() {
+  console.log("Shutting down gracefully...");
+  wss.clients.forEach((ws) => {
+    try {
+      ws.send(JSON.stringify({ type: "error", message: "Server is restarting — please refresh in a moment." }));
+      ws.close();
+    } catch { /* already closed */ }
+  });
+  wss.close();
+  httpServer.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 5000);
+}
+process.on("SIGTERM", gracefulShutdown);
+process.on("SIGINT", gracefulShutdown);
