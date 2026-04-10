@@ -45,6 +45,17 @@ const MIME_TYPES = {
 
 const CANONICAL_HOST = "huddleplayroom.com";
 
+// Assets with Vite-hashed filenames can be cached indefinitely.
+const CACHEABLE_EXTS = new Set([".js", ".css", ".woff", ".woff2", ".png", ".jpg", ".svg", ".ico"]);
+
+function applySecurityHeaders(res) {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+}
+
 const httpServer = createServer((req, res) => {
   const host = (req.headers.host || "").split(":")[0];
   if (host && host !== CANONICAL_HOST && host !== "localhost") {
@@ -53,12 +64,19 @@ const httpServer = createServer((req, res) => {
     return;
   }
   if (!HAS_DIST) {
+    applySecurityHeaders(res);
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end("<html><body><h2>Game server is running.</h2><p>Run <code>npm run build</code> first, or use <code>npm run dev</code> for development.</p></body></html>");
     return;
   }
   let filePath = join(DIST_DIR, req.url === "/" ? "index.html" : req.url);
   const ext = extname(filePath);
+  applySecurityHeaders(res);
+  if (CACHEABLE_EXTS.has(ext)) {
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  } else {
+    res.setHeader("Cache-Control", "no-cache");
+  }
   try {
     const data = readFileSync(filePath);
     res.writeHead(200, { "Content-Type": MIME_TYPES[ext] || "application/octet-stream" });
@@ -78,7 +96,29 @@ const httpServer = createServer((req, res) => {
 const rooms = new Map();
 let nextClientId = 1;
 
-const wss = new WebSocketServer({ server: httpServer });
+// ── Rate limiting ────────────────────────────────────────────────
+// Simple 1-second sliding window per client. Allows burst play actions
+// (Snake direction changes, Bomber moves) while blocking floods.
+const rateLimits = new Map(); // clientId -> { count, resetAt }
+
+function isRateLimited(clientId) {
+  const now = Date.now();
+  let limit = rateLimits.get(clientId);
+  if (!limit || now > limit.resetAt) {
+    limit = { count: 0, resetAt: now + 1000 };
+    rateLimits.set(clientId, limit);
+  }
+  limit.count++;
+  return limit.count > 60; // 60 messages/sec is generous for legit play
+}
+
+const wss = new WebSocketServer({
+  server: httpServer,
+  verifyClient: ({ origin }) => {
+    if (!origin) return true; // server-to-server, health checks
+    return origin === `https://${CANONICAL_HOST}` || origin.includes("localhost");
+  },
+});
 
 // Send a WebSocket ping to every connected client every 25 seconds.
 // This prevents Cloudflare Tunnel (and other proxies) from treating the
@@ -103,6 +143,7 @@ wss.on("connection", (ws) => {
   ws.send(JSON.stringify({ type: "welcome", id: clientId }));
 
   ws.on("message", (raw) => {
+    if (isRateLimited(clientId)) return; // silently drop; don't reward flood with a response
     let message;
     try {
       message = JSON.parse(raw.toString());
@@ -113,7 +154,10 @@ wss.on("connection", (ws) => {
     handleMessage(ws, clientId, message);
   });
 
-  ws.on("close", () => handleDisconnect(clientId));
+  ws.on("close", () => {
+    rateLimits.delete(clientId);
+    handleDisconnect(clientId);
+  });
 });
 
 // ── Message routing ──────────────────────────────────────────────
