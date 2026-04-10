@@ -45,6 +45,8 @@ Follows semver. After every confirmed fix or feature, before pushing:
 
 Current version is tracked in `package.json`. `package-lock.json` must always match. Git tags are the source of truth for releases. The tag message should briefly describe what changed (e.g. `v1.5.1 — Word Chain duplicate/dictionary fixes`).
 
+The footer in the live app displays the current version (e.g. `v1.9.0`). It is sourced directly from `package.json` via a Vite JSON import in `src/App.jsx` — **no manual footer update is needed**. Bumping `package.json` is sufficient; the footer version auto-syncs on the next build.
+
 ## Deployment
 
 Hosted on **Railway**, auto-deploying from GitHub on every push.

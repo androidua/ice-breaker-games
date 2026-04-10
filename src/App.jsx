@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, Component } from "react";
+import { version } from "../package.json";
 import Lobby from "./Lobby.jsx";
 import VotingPhase from "./VotingPhase.jsx";
 import SnakeGame from "./games/SnakeGame.jsx";
@@ -204,7 +205,8 @@ export default function App() {
           , built with Claude AI &amp; Cursor
         </div>
         <div className="footer-right">
-          {room?.currentGame === "snake" ? "WASD / Arrows to move" : ""}
+          {room?.currentGame === "snake" && <span>WASD / Arrows to move</span>}
+          <span className="footer-version">v{version}</span>
         </div>
       </footer>
     </div>
