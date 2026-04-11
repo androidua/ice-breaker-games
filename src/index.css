@@ -16,6 +16,7 @@ input {
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100svh; /* mobile: viewport height excluding browser chrome */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -25,6 +26,7 @@ body {
 #root {
   width: min(960px, 100%);
   padding: 24px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
 }
 
 .app {
@@ -202,6 +204,9 @@ button {
   border: 1px solid #2a2a2a;
   background: #f7f3ea;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  color: inherit;
 }
 
 button:hover {
@@ -1070,8 +1075,34 @@ button:disabled {
 /* ── Responsive ───────────────────────────────────────────── */
 
 @media (max-width: 720px) {
+  /* Top-align content instead of vertically centering — avoids large empty gaps */
+  body {
+    align-items: flex-start;
+  }
+
   #root {
     padding: 12px;
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  /* Footer: stack vertically, center-align, allow text to wrap */
+  .footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    text-align: center;
+  }
+
+  .footer-center {
+    white-space: normal;
+    text-align: center;
+  }
+
+  .footer-right {
+    align-items: center;
+    text-align: center;
   }
 
   .stage {
@@ -1136,5 +1167,30 @@ button:disabled {
   /* Voting game cards: full tap area */
   .game-card {
     padding: 18px 14px;
+  }
+}
+
+/* ── Phone-specific: header collapse ─────────────────────── */
+
+@media (max-width: 600px) {
+  /* Switch from 3-column grid to stacked column: brand → room code */
+  .topbar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* Room code moves below the brand, stays centered */
+  .topbar-right {
+    justify-content: center;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+  }
+
+  /* Allow subtitle to wrap on very narrow screens */
+  .brand-subtitle {
+    white-space: normal;
+    text-align: center;
   }
 }
