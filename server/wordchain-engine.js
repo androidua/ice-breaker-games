@@ -10,7 +10,7 @@ const WORDS = new Set(
     .filter(Boolean)
 );
 
-const TURN_DURATION = 10;
+const TURN_DURATION = 15;
 const REVEAL_DURATION = 4;
 
 export function createWordChainState({ players, rng }) {

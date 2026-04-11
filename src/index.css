@@ -245,10 +245,9 @@ button:disabled {
   display: grid;
   grid-template-areas:
     ". up ."
-    "left . right"
-    ". down .";
+    "left down right";
   grid-template-columns: repeat(3, 56px);
-  grid-template-rows: repeat(3, 56px);
+  grid-template-rows: repeat(2, 56px);
   gap: 6px;
   justify-content: center;
 }
@@ -1094,7 +1093,7 @@ button:disabled {
   .dpad {
     margin-top: 8px;
     grid-template-columns: repeat(3, 72px);
-    grid-template-rows: repeat(3, 72px);
+    grid-template-rows: repeat(2, 72px);
   }
 
   .dpad button {
