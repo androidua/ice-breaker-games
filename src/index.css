@@ -407,6 +407,7 @@ button:disabled {
   flex-direction: column;
   gap: 6px;
   padding: 16px 12px;
+  min-height: 80px;
   text-align: left;
   border: 2px solid #b6a88f;
   background: #fdfaf3;
