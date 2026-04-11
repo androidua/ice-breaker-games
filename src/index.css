@@ -243,13 +243,26 @@ button:disabled {
 
 .controls {
   display: grid;
+  grid-template-areas:
+    ". up ."
+    "left down right";
+  grid-template-columns: repeat(3, 56px);
+  grid-template-rows: repeat(2, 56px);
   gap: 6px;
-  justify-items: center;
+  justify-content: center;
 }
 
-.controls-row {
+.ctrl-up    { grid-area: up; }
+.ctrl-left  { grid-area: left; }
+.ctrl-down  { grid-area: down; }
+.ctrl-right { grid-area: right; }
+
+.controls button {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  padding: 0;
 }
 
 .footer {
@@ -1123,20 +1136,25 @@ button:disabled {
     padding: 6px;
   }
 
-  /* D-pad: large, easy-to-tap buttons for thumbs */
+  /* D-pad: large, easy-to-tap grid — guaranteed Up/Down alignment via grid-area */
   .controls {
     margin-top: 8px;
-  }
-
-  .controls-row {
-    gap: 12px;
+    grid-template-columns: repeat(3, 72px);
+    grid-template-rows: repeat(2, 72px);
   }
 
   .controls button {
-    min-width: 72px;
-    min-height: 72px;
+    min-height: unset; /* override the 44px rule — cell sizing handles tap area */
     font-size: 22px;
     padding: 0;
+  }
+
+  /* Small inline buttons: exempt from the 44px touch-target floor.
+     .lie-toggle lives inside a full-width <label> (already a large tap area).
+     .emoji-tab is a compact category selector that should not expand to full button height. */
+  .lie-toggle,
+  .emoji-tab {
+    min-height: unset;
   }
 
   /* General buttons: meet Apple's 44px minimum touch target */
