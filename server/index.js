@@ -112,7 +112,15 @@ const httpServer = createServer((req, res) => {
       sendCompressed(req, res, 200, MIME_TYPES[ext] || "application/octet-stream", ext, data);
       return;
     }
-    // SPA fallback — serve index.html for unmatched routes
+    // For asset files (CSS, JS, images, etc.) return a real 404 — never serve HTML
+    // with the wrong MIME type, which would be silently ignored by the browser due
+    // to X-Content-Type-Options: nosniff and break styling / scripting entirely.
+    if (ext) {
+      res.writeHead(404);
+      res.end("Not found");
+      return;
+    }
+    // SPA fallback — for extensionless routes (client-side navigation) serve index.html
     readFile(join(DIST_DIR, "index.html"), (err2, html) => {
       if (!err2) {
         sendCompressed(req, res, 200, "text/html", ".html", html);
