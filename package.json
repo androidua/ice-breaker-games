@@ -1,7 +1,7 @@
 {
   "name": "huddle-play-room",
   "private": true,
-  "version": "1.9.4",
+  "version": "1.9.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
