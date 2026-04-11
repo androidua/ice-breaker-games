@@ -126,6 +126,14 @@ export default function WordChainGame({ game, room, me, send }) {
         </div>
       )}
 
+      {isHost && game.status === "playing" && (
+        <div className="actions">
+          <button type="button" className="skip-btn" onClick={() => send({ type: "skipPhase" })}>
+            Skip Turn
+          </button>
+        </div>
+      )}
+
       <p className="game-instructions">
         Each word must start with the last letter of the previous word · Can't think of one in time? You're eliminated · Last player standing wins
       </p>

@@ -334,6 +334,21 @@ function handleSkipPhase(clientId) {
         room.game = nextWordChainRound(room.game, Math.random);
         broadcastGameState(room);
         startWordChainTick(room);
+      } else if (room.game.status === "playing") {
+        room.game = eliminateCurrentPlayer(room.game);
+        broadcastGameState(room);
+        if (room.game.status === "round_end") {
+          stopLoop(room);
+          awardRoundWin(room, room.game.roundWinnerId);
+          sendRoomUpdate(room);
+          setTimeout(() => {
+            if (!room || room.status !== "playing") return;
+            stopLoop(room);
+            room.game = nextWordChainRound(room.game, Math.random);
+            broadcastGameState(room);
+            startWordChainTick(room);
+          }, 3000);
+        }
       }
       break;
     case "bomber":

@@ -230,15 +230,15 @@ export default function BomberGame({ game, room, me, send }) {
       <canvas ref={canvasRef} className="bomber-canvas" />
 
       <div className="bomber-controls">
-        <div className="bomber-dpad">
-          <button type="button" className="dpad-btn dpad-up"
-            onPointerDown={() => dpadDir("up")} onPointerUp={dpadStop} onPointerCancel={dpadStop} onPointerLeave={dpadStop}>▲</button>
-          <button type="button" className="dpad-btn dpad-left"
-            onPointerDown={() => dpadDir("left")} onPointerUp={dpadStop} onPointerCancel={dpadStop} onPointerLeave={dpadStop}>◀</button>
-          <button type="button" className="dpad-btn dpad-right"
-            onPointerDown={() => dpadDir("right")} onPointerUp={dpadStop} onPointerCancel={dpadStop} onPointerLeave={dpadStop}>▶</button>
-          <button type="button" className="dpad-btn dpad-down"
-            onPointerDown={() => dpadDir("down")} onPointerUp={dpadStop} onPointerCancel={dpadStop} onPointerLeave={dpadStop}>▼</button>
+        <div className="dpad">
+          <button type="button" className="dpad-up"
+            onPointerDown={() => dpadDir("up")} onPointerUp={dpadStop} onPointerCancel={dpadStop} onPointerLeave={dpadStop}>↑</button>
+          <button type="button" className="dpad-left"
+            onPointerDown={() => dpadDir("left")} onPointerUp={dpadStop} onPointerCancel={dpadStop} onPointerLeave={dpadStop}>←</button>
+          <button type="button" className="dpad-right"
+            onPointerDown={() => dpadDir("right")} onPointerUp={dpadStop} onPointerCancel={dpadStop} onPointerLeave={dpadStop}>→</button>
+          <button type="button" className="dpad-down"
+            onPointerDown={() => dpadDir("down")} onPointerUp={dpadStop} onPointerCancel={dpadStop} onPointerLeave={dpadStop}>↓</button>
         </div>
         <button
           type="button"
@@ -262,15 +262,10 @@ export default function BomberGame({ game, room, me, send }) {
         </div>
       )}
 
-      <div className="bomber-help">
-        <div className="bomber-help-row">
-          <span><kbd>↑↓←→</kbd> / <kbd>WASD</kbd> move &nbsp;·&nbsp; <kbd>Space</kbd> drop bomb</span>
-          <span className="bomber-help-mobile">D-pad to move · 💣 button to drop bomb</span>
-        </div>
-        <div className="bomber-help-row">
-          <span>💣 power-up = +1 bomb capacity &nbsp;·&nbsp; 🔥 power-up = longer flame range</span>
-        </div>
-      </div>
+      <p className="game-instructions">
+        <span className="hint-kb"><kbd>↑↓←→</kbd> / <kbd>WASD</kbd> move · <kbd>Space</kbd> drop bomb · 💣 power-up = +1 bomb · 🔥 power-up = longer flame</span>
+        <span className="hint-touch">D-pad to move · 💣 button to drop bomb · 💣 power-up = +1 bomb · 🔥 power-up = longer flame</span>
+      </p>
 
       <div className="bomber-scoreboard">
         {Object.values(game.players || {})

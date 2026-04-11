@@ -241,28 +241,36 @@ button:disabled {
   border: 1px solid #2a2a2a;
 }
 
-.controls {
+.dpad {
   display: grid;
   grid-template-areas:
     ". up ."
-    "left down right";
+    "left . right"
+    ". down .";
   grid-template-columns: repeat(3, 56px);
-  grid-template-rows: repeat(2, 56px);
+  grid-template-rows: repeat(3, 56px);
   gap: 6px;
   justify-content: center;
 }
 
-.ctrl-up    { grid-area: up; }
-.ctrl-left  { grid-area: left; }
-.ctrl-down  { grid-area: down; }
-.ctrl-right { grid-area: right; }
+.dpad-up    { grid-area: up; }
+.dpad-left  { grid-area: left; }
+.dpad-down  { grid-area: down; }
+.dpad-right { grid-area: right; }
 
-.controls button {
+.dpad button {
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hint-touch { display: none; }
+@media (hover: none) {
+  .hint-kb    { display: none; }
+  .hint-touch { display: inline; }
 }
 
 .footer {
@@ -807,18 +815,6 @@ button:disabled {
 }
 
 /* Bomber help / instructions */
-.bomber-help {
-  width: min(90vw, 540px);
-  margin: 0 auto 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.bomber-help-row {
-  font-size: 12px;
-  color: #666;
-  text-align: center;
-}
 .bomber-help-row kbd {
   display: inline-block;
   font-family: inherit;
@@ -828,13 +824,6 @@ button:disabled {
   border-radius: 3px;
   padding: 0 4px;
 }
-/* On touch devices, show mobile hint instead of keyboard hint */
-.bomber-help-mobile { display: none; }
-@media (hover: none) {
-  .bomber-help-row span:first-child { display: none; }
-  .bomber-help-mobile { display: inline; }
-}
-
 /* Bomber scoreboard */
 .bomber-scoreboard {
   display: flex;
@@ -885,41 +874,6 @@ button:disabled {
   margin-top: 8px;
 }
 
-.bomber-dpad {
-  display: grid;
-  grid-template-areas:
-    ".    up   ."
-    "left .    right"
-    ".    down .";
-  grid-template-columns: repeat(3, 52px);
-  grid-template-rows: repeat(3, 52px);
-  gap: 3px;
-}
-
-.dpad-btn {
-  border: none;
-  border-radius: 8px;
-  background: #444;
-  color: #fff;
-  font-size: 18px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  min-height: 52px;
-  min-width: 52px;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.dpad-btn:active {
-  background: #666;
-}
-
-.dpad-up    { grid-area: up; }
-.dpad-down  { grid-area: down; }
-.dpad-left  { grid-area: left; }
-.dpad-right { grid-area: right; }
 
 .bomber-bomb-btn {
   width: 72px;
@@ -1137,13 +1091,13 @@ button:disabled {
   }
 
   /* D-pad: large, easy-to-tap grid — guaranteed Up/Down alignment via grid-area */
-  .controls {
+  .dpad {
     margin-top: 8px;
     grid-template-columns: repeat(3, 72px);
-    grid-template-rows: repeat(2, 72px);
+    grid-template-rows: repeat(3, 72px);
   }
 
-  .controls button {
+  .dpad button {
     min-height: unset; /* override the 44px rule — cell sizing handles tap area */
     font-size: 22px;
     padding: 0;

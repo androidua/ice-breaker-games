@@ -22,6 +22,8 @@ export default function HotTakeVotingGame({ game, room, me, send }) {
     ? room?.players.find((p) => p.id === game.roundWinnerId)?.name
     : null;
 
+  const isHost = room?.hostId === me.id;
+
   const castVote = (vote) => {
     if (hasVoted || game.status !== "voting") return;
     setSelectedVote(vote);
@@ -91,6 +93,14 @@ export default function HotTakeVotingGame({ game, room, me, send }) {
           </>
         )}
       </div>
+
+      {isHost && game.status === "voting" && (
+        <div className="actions">
+          <button type="button" className="skip-btn" onClick={() => send({ type: "skipPhase" })}>
+            Skip
+          </button>
+        </div>
+      )}
 
       <p className="game-instructions">
         Vote agree or disagree before time runs out · Majority side gets +1 point · Ties give no points
