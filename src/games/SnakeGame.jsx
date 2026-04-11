@@ -132,14 +132,10 @@ export default function SnakeGame({ game, room, me, send }) {
         <kbd>↑↓←→</kbd> or <kbd>WASD</kbd> to steer · Swipe on mobile · Eat food to grow · Avoid walls &amp; other snakes
       </p>
       <section className="controls" aria-label="On-screen controls">
-        <div className="controls-row">
-          <button type="button" onClick={() => send({ type: "input", dir: "UP" })}>Up</button>
-        </div>
-        <div className="controls-row">
-          <button type="button" onClick={() => send({ type: "input", dir: "LEFT" })}>Left</button>
-          <button type="button" onClick={() => send({ type: "input", dir: "DOWN" })}>Down</button>
-          <button type="button" onClick={() => send({ type: "input", dir: "RIGHT" })}>Right</button>
-        </div>
+        <button type="button" className="ctrl-up" aria-label="Move up" onClick={() => send({ type: "input", dir: "UP" })}>↑</button>
+        <button type="button" className="ctrl-left" aria-label="Move left" onClick={() => send({ type: "input", dir: "LEFT" })}>←</button>
+        <button type="button" className="ctrl-down" aria-label="Move down" onClick={() => send({ type: "input", dir: "DOWN" })}>↓</button>
+        <button type="button" className="ctrl-right" aria-label="Move right" onClick={() => send({ type: "input", dir: "RIGHT" })}>→</button>
       </section>
     </>
   );
