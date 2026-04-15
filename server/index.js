@@ -148,7 +148,10 @@ async function createLinearIssue({ type, name, description, email, screenshot })
     body: JSON.stringify({ query: mutation, variables }),
   });
 
-  if (!resp.ok) throw new Error(`Linear API returned ${resp.status}`);
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`Linear API returned ${resp.status}: ${body}`);
+  }
   const result = await resp.json();
   if (result.errors) throw new Error(result.errors[0].message);
   if (!result.data.issueCreate.success) throw new Error("Linear issue creation failed.");
