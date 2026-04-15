@@ -143,7 +143,7 @@ async function createLinearIssue({ type, name, description, email, screenshot })
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${LINEAR_API_KEY}`,
+      Authorization: LINEAR_API_KEY,
     },
     body: JSON.stringify({ query: mutation, variables }),
   });
