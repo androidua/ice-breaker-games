@@ -117,7 +117,8 @@ async function createLinearIssue({ type, name, description, email, screenshot })
     `**Submitted by:** ${name}`,
     `**Email:** ${email || "Not provided"}`,
     `**Type:** ${typeLabel}`,
-  ].join("\n");
+    screenshot ? "\n**Screenshot:** Attached by submitter (not shown — base64 image)" : "",
+  ].filter(Boolean).join("\n");
 
   const mutation = `mutation CreateIssue($input: IssueCreateInput!) {
     issueCreate(input: $input) {
@@ -142,7 +143,7 @@ async function createLinearIssue({ type, name, description, email, screenshot })
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: LINEAR_API_KEY,
+      Authorization: `Bearer ${LINEAR_API_KEY}`,
     },
     body: JSON.stringify({ query: mutation, variables }),
   });
@@ -150,29 +151,9 @@ async function createLinearIssue({ type, name, description, email, screenshot })
   if (!resp.ok) throw new Error(`Linear API returned ${resp.status}`);
   const result = await resp.json();
   if (result.errors) throw new Error(result.errors[0].message);
+  if (!result.data.issueCreate.success) throw new Error("Linear issue creation failed.");
 
-  const issue = result.data.issueCreate.issue;
-
-  if (screenshot) {
-    const attachMutation = `mutation AttachToIssue($issueId: String!, $url: String!, $title: String!) {
-      attachmentCreate(input: { issueId: $issueId, url: $url, title: $title }) {
-        success
-      }
-    }`;
-    await fetch("https://api.linear.app/graphql", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: LINEAR_API_KEY,
-      },
-      body: JSON.stringify({
-        query: attachMutation,
-        variables: { issueId: issue.id, url: screenshot, title: "Screenshot" },
-      }),
-    });
-  }
-
-  return issue;
+  return result.data.issueCreate.issue;
 }
 
 function applySecurityHeaders(res) {
