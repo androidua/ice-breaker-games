@@ -148,10 +148,7 @@ async function createLinearIssue({ type, name, description, email, screenshot })
     body: JSON.stringify({ query: mutation, variables }),
   });
 
-  if (!resp.ok) {
-    const body = await resp.text();
-    throw new Error(`Linear API returned ${resp.status}: ${body}`);
-  }
+  if (!resp.ok) throw new Error(`Linear API returned ${resp.status}`);
   const result = await resp.json();
   if (result.errors) throw new Error(result.errors[0].message);
   if (!result.data.issueCreate.success) throw new Error("Linear issue creation failed.");
@@ -263,7 +260,7 @@ const httpServer = createServer((req, res) => {
         const message = status === 400 ? err.message : "Something went wrong.";
         if (status !== 400) console.error("[feedback] error:", err.message);
         res.writeHead(status, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: message, _debug: err.message }));
+        res.end(JSON.stringify({ error: message }));
       });
     return;
   }
