@@ -1331,7 +1331,8 @@ button:disabled {
   }
 
   .footer-version {
-    display: none;
+    display: block;
+    margin-top: 4px;
   }
 
   .stage {
