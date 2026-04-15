@@ -260,7 +260,7 @@ const httpServer = createServer((req, res) => {
         const message = status === 400 ? err.message : "Something went wrong.";
         if (status !== 400) console.error("[feedback] error:", err.message);
         res.writeHead(status, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: message }));
+        res.end(JSON.stringify({ error: message, _debug: err.message }));
       });
     return;
   }
