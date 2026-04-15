@@ -52,6 +52,129 @@ const CACHEABLE_EXTS = new Set([".js", ".css", ".woff", ".woff2", ".png", ".jpg"
 // Extensions whose content compresses well (text-based).
 const COMPRESSIBLE_EXTS = new Set([".html", ".js", ".css", ".json", ".svg"]);
 
+// ── Feedback rate limiting ──────────────────────────────────────
+const feedbackLimits = new Map(); // ip -> { count, resetAt }
+const FEEDBACK_MAX = 5;
+const FEEDBACK_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+
+function isFeedbackRateLimited(ip) {
+  const now = Date.now();
+  const entry = feedbackLimits.get(ip);
+  if (!entry || now > entry.resetAt) {
+    feedbackLimits.set(ip, { count: 1, resetAt: now + FEEDBACK_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > FEEDBACK_MAX;
+}
+
+// Linear API config
+const LINEAR_API_KEY = process.env.LINEAR_API_KEY || "";
+const LINEAR_TEAM_ID = "82c6c2fb-00ab-4cc2-8bae-720d29295836";
+const LINEAR_PROJECT_ID = "869ddd27-1864-4461-a9d4-b14f12eb367a";
+const LINEAR_BACKLOG_STATE_ID = "da26d051-a623-493c-981c-32dab9139d2d";
+const LINEAR_LABELS = {
+  bug: "f40a5504-e74e-4c7d-8baa-436edf5e44d8",
+  feature: "d9dc4752-1524-4dd1-bfc6-352073cded9d",
+  other: "5cf99f15-350b-48b8-a81c-dd4ba0f14a36",
+};
+const LINEAR_PRIORITIES = { bug: 2, feature: 3, other: 4 };
+const TYPE_DISPLAY = { bug: "Bug", feature: "Feature", other: "Other" };
+
+function readJsonBody(req, maxBytes = 4 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        req.destroy();
+        reject(new Error("Body too large"));
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString()));
+      } catch {
+        reject(new Error("Invalid JSON"));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+async function createLinearIssue({ type, name, description, email, screenshot }) {
+  const typeLabel = TYPE_DISPLAY[type];
+  const titlePrefix = `[${typeLabel}]`;
+  const titleDesc = description.length > 70 ? description.slice(0, 70) + "…" : description;
+  const title = `${titlePrefix} ${titleDesc}`;
+
+  const body = [
+    "## Description\n",
+    description,
+    "\n---\n",
+    `**Submitted by:** ${name}`,
+    `**Email:** ${email || "Not provided"}`,
+    `**Type:** ${typeLabel}`,
+  ].join("\n");
+
+  const mutation = `mutation CreateIssue($input: IssueCreateInput!) {
+    issueCreate(input: $input) {
+      success
+      issue { id identifier url }
+    }
+  }`;
+
+  const variables = {
+    input: {
+      teamId: LINEAR_TEAM_ID,
+      projectId: LINEAR_PROJECT_ID,
+      stateId: LINEAR_BACKLOG_STATE_ID,
+      title,
+      description: body,
+      priority: LINEAR_PRIORITIES[type],
+      labelIds: [LINEAR_LABELS[type]],
+    },
+  };
+
+  const resp = await fetch("https://api.linear.app/graphql", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: LINEAR_API_KEY,
+    },
+    body: JSON.stringify({ query: mutation, variables }),
+  });
+
+  if (!resp.ok) throw new Error(`Linear API returned ${resp.status}`);
+  const result = await resp.json();
+  if (result.errors) throw new Error(result.errors[0].message);
+
+  const issue = result.data.issueCreate.issue;
+
+  if (screenshot) {
+    const attachMutation = `mutation AttachToIssue($issueId: String!, $url: String!, $title: String!) {
+      attachmentCreate(input: { issueId: $issueId, url: $url, title: $title }) {
+        success
+      }
+    }`;
+    await fetch("https://api.linear.app/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: LINEAR_API_KEY,
+      },
+      body: JSON.stringify({
+        query: attachMutation,
+        variables: { issueId: issue.id, url: screenshot, title: "Screenshot" },
+      }),
+    });
+  }
+
+  return issue;
+}
+
 function applySecurityHeaders(res) {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "SAMEORIGIN");
@@ -90,6 +213,76 @@ const httpServer = createServer((req, res) => {
     return;
   }
   applySecurityHeaders(res);
+
+  // CORS preflight for /api/feedback (dev mode: frontend on :5173, server on :3000)
+  if (req.method === "OPTIONS" && req.url === "/api/feedback") {
+    res.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Max-Age": "86400",
+    });
+    res.end();
+    return;
+  }
+
+  // ── Feedback API ────────────────────────────────────────────────
+  if (req.method === "POST" && req.url === "/api/feedback") {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    if (!LINEAR_API_KEY) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Feedback is temporarily unavailable." }));
+      return;
+    }
+
+    const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress;
+    if (isFeedbackRateLimited(ip)) {
+      res.writeHead(429, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Too many submissions. Please try again later." }));
+      return;
+    }
+
+    readJsonBody(req)
+      .then((data) => {
+        const { type, name, description, email, screenshot } = data;
+        if (!["bug", "feature", "other"].includes(type)) {
+          throw Object.assign(new Error("Invalid type."), { status: 400 });
+        }
+        if (!name || typeof name !== "string" || name.trim().length === 0 || name.length > 50) {
+          throw Object.assign(new Error("Name is required (max 50 chars)."), { status: 400 });
+        }
+        if (!description || typeof description !== "string" || description.trim().length === 0 || description.length > 2000) {
+          throw Object.assign(new Error("Description is required (max 2000 chars)."), { status: 400 });
+        }
+        if (email && (typeof email !== "string" || email.length > 100)) {
+          throw Object.assign(new Error("Email must be under 100 chars."), { status: 400 });
+        }
+        if (screenshot && (typeof screenshot !== "string" || screenshot.length > 2.7 * 1024 * 1024)) {
+          throw Object.assign(new Error("Screenshot must be under 2MB."), { status: 400 });
+        }
+
+        return createLinearIssue({
+          type,
+          name: name.trim(),
+          description: description.trim(),
+          email: email?.trim() || "",
+          screenshot: screenshot || null,
+        });
+      })
+      .then(() => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: true }));
+      })
+      .catch((err) => {
+        const status = err.status || 500;
+        const message = status === 400 ? err.message : "Something went wrong.";
+        res.writeHead(status, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: message }));
+      });
+    return;
+  }
+
   if (!HAS_DIST) {
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end("<html><body><h2>Game server is running.</h2><p>Run <code>npm run build</code> first, or use <code>npm run dev</code> for development.</p></body></html>");
