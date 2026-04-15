@@ -171,6 +171,7 @@ The app is designed for phone use. Key patterns to maintain:
 `test/smoke-test.js` starts the server on port 9876, connects two WebSocket clients, and runs through the core flow: host a room, join it, start voting, vote for a game, verify the game starts, test error handling, and test disconnect cleanup. Run with `npm test`.
 
 A **pre-push git hook** (`.git/hooks/pre-push`) runs the smoke test automatically before every `git push`. If any test fails, the push is blocked. Bypass with `git push --no-verify` if needed.
+Note: `.git/hooks/` is not committed to the repo. On a fresh clone, recreate the hook manually — it should run `npm test` and exit 1 on failure.
 
 ### AI-Powered Pre-Push Review
 

@@ -1318,16 +1318,9 @@ button:disabled {
   }
 
   .feedback-btn {
-    position: fixed;
-    bottom: 7%;
-    left: 50%;
-    transform: translateX(-50%);
     font-size: 11px;
     padding: 5px 14px;
     white-space: nowrap;
-    background: #f4f1ea;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-    z-index: 100;
   }
 
   .footer-version {
