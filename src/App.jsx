@@ -11,6 +11,7 @@ import TyperacerGame from "./games/TyperacerGame.jsx";
 import WordChainGame from "./games/WordChainGame.jsx";
 import BomberGame from "./games/BomberGame.jsx";
 import HotTakeVotingGame from "./games/HotTakeVotingGame.jsx";
+import FeedbackModal from "./FeedbackModal.jsx";
 
 function getWsUrl() {
   const isDev = window.location.port.startsWith("517");
@@ -63,6 +64,7 @@ export default function App() {
   const [game, setGame] = useState(null);
   const [voting, setVoting] = useState(null);
   const [error, setError] = useState("");
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const send = (payload) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
@@ -206,9 +208,14 @@ export default function App() {
         </div>
         <div className="footer-right">
           {room?.currentGame === "snake" && <span>WASD / Arrows to move</span>}
+          <button type="button" className="feedback-btn" onClick={() => setFeedbackOpen(true)}>
+            💬 Feedback
+          </button>
           <span className="footer-version">v{version}</span>
         </div>
       </footer>
+
+      {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
     </div>
   );
 }

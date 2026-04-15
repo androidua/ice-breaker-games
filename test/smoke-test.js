@@ -270,6 +270,39 @@ async function runTests() {
       "Room has 1 player after disconnect"
     );
 
+    // ── Test: Feedback endpoint ────────────────────────────────────
+
+    console.log(colours.bold("\nTest: Feedback endpoint"));
+
+    const feedbackUrl = `http://localhost:${PORT}/api/feedback`;
+
+    // OPTIONS preflight → 204
+    const preflightResp = await fetch(feedbackUrl, { method: "OPTIONS" });
+    assert(preflightResp.status === 204, "OPTIONS preflight returns 204");
+    assert(
+      preflightResp.headers.get("access-control-allow-methods") === "POST",
+      "Preflight includes correct Allow-Methods header"
+    );
+
+    // Without LINEAR_API_KEY, the server returns 503 before validation.
+    // The test server runs without LINEAR_API_KEY, so all POSTs get 503.
+    const noKeyResp = await fetch(feedbackUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "bug", name: "Tester", description: "Something broke" }),
+    });
+    assert(noKeyResp.status === 503, "Request without API key returns 503");
+    const noKeyBody = await noKeyResp.json();
+    assert(noKeyBody.error === "Feedback is temporarily unavailable.", "503 returns correct message");
+
+    // Also verify 503 for invalid payloads (API key check comes first)
+    const badResp = await fetch(feedbackUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "bug" }),
+    });
+    assert(badResp.status === 503, "Missing fields still returns 503 when no API key");
+
     // ── Summary ─────────────────────────────────────────────────
 
     host.close();

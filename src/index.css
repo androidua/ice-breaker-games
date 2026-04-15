@@ -1039,6 +1039,251 @@ button:disabled {
   background: #eaf0f7;
 }
 
+/* ── Feedback Modal ──────────────────────────────────────────── */
+
+.feedback-btn {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-color: #3d5a80;
+  color: #3d5a80;
+}
+
+.feedback-btn:hover {
+  background: #eef3f8;
+}
+
+.feedback-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.feedback-modal {
+  background: #f4f1ea;
+  border: 2px solid #b6a88f;
+  padding: 24px;
+  width: 100%;
+  max-width: 400px;
+  max-height: 90vh;
+  overflow-y: auto;
+  font-size: 13px;
+}
+
+.feedback-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.feedback-title {
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.feedback-close {
+  border: none;
+  background: none;
+  font-size: 18px;
+  color: #888;
+  cursor: pointer;
+  padding: 0 4px;
+  text-transform: none;
+}
+
+.feedback-close:hover {
+  color: #141414;
+  background: none;
+}
+
+.feedback-field {
+  margin-bottom: 12px;
+}
+
+.feedback-label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+  color: #666;
+}
+
+.feedback-optional {
+  color: #888;
+}
+
+.feedback-optional span {
+  font-size: 10px;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.7;
+}
+
+.feedback-types {
+  display: flex;
+  gap: 6px;
+}
+
+.feedback-type-btn {
+  flex: 1;
+  padding: 6px 4px;
+  text-align: center;
+  font-size: 11px;
+  border: 1px solid #b6a88f;
+  background: transparent;
+}
+
+.feedback-type-btn:hover {
+  background: #ebe3d2;
+}
+
+.feedback-type-btn.selected.bug {
+  border: 2px solid #c04b3a;
+  background: #fef0ee;
+  color: #c04b3a;
+}
+
+.feedback-type-btn.selected.feature {
+  border: 2px solid #bb87fc;
+  background: #f5f0ff;
+  color: #7c4dff;
+}
+
+.feedback-type-btn.selected.other {
+  border: 2px solid #3d5a80;
+  background: #eef3f8;
+  color: #3d5a80;
+}
+
+.feedback-input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #b6a88f;
+  background: #fffdf7;
+  font-family: inherit;
+  font-size: 16px;
+  color: #141414;
+}
+
+.feedback-input:focus {
+  outline: none;
+  border-color: #3d5a80;
+}
+
+.feedback-input.invalid {
+  border-color: #c04b3a;
+}
+
+.feedback-textarea {
+  resize: vertical;
+  min-height: 64px;
+}
+
+.feedback-error {
+  color: #c04b3a;
+  font-size: 11px;
+  margin-top: 3px;
+}
+
+.feedback-server-error {
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.feedback-file-label {
+  display: block;
+  padding: 12px;
+  border: 1px dashed #d4cbb8;
+  background: #fffdf7;
+  text-align: center;
+  font-size: 12px;
+  color: #999;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.feedback-file-label:hover {
+  border-color: #b6a88f;
+  color: #666;
+}
+
+.feedback-screenshot-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #b6a88f;
+  background: #fffdf7;
+}
+
+.feedback-screenshot-preview img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border: 1px solid #d4cbb8;
+}
+
+.feedback-screenshot-remove {
+  border: none;
+  background: none;
+  color: #c04b3a;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  text-transform: none;
+}
+
+.feedback-screenshot-remove:hover {
+  background: #fef0ee;
+}
+
+.feedback-screenshot-name {
+  font-size: 11px;
+  color: #888;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feedback-submit {
+  width: 100%;
+  padding: 10px;
+  background: #3d5a80;
+  color: #f4f1ea;
+  border: none;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.feedback-submit:hover {
+  background: #34506e;
+}
+
+.feedback-submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.feedback-success {
+  text-align: center;
+  padding: 32px 16px;
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #5a7d3a;
+}
+
 /* ── Responsive ───────────────────────────────────────────── */
 
 @media (max-width: 720px) {
