@@ -305,7 +305,7 @@ The tunnel doesn't install any background service and doesn't leave anything run
 
 **Scoring:** 1 point awarded to the round winner (last player standing).
 
-**Timer:** Each player has **10 seconds** per turn (shown on screen). Runs out → eliminated.
+**Timer:** Each player has **15 seconds** per turn (shown on screen). Runs out → eliminated.
 
 ---
 
@@ -420,6 +420,30 @@ Formula: `points = ceil((time_remaining / 15) × 1000)`, minimum 100.
 
 ---
 
+## Feedback Form
+
+A **Send Feedback** button lives in the app footer. Clicking it opens a modal where players can report bugs, suggest features, or send general messages.
+
+**Form fields:** Type (Bug / Feature / Other), Name, Subject, Description, Email (optional), Screenshot (optional, max 2 MB).
+
+Submissions are sent directly to a **Linear** project as new issues. The subject becomes the issue title, the description and metadata populate the body, and any attached screenshot is uploaded and embedded inline.
+
+**Rate limit:** 3 submissions per IP per 10-minute window.
+
+### Enabling feedback in your own deployment
+
+The feedback endpoint requires a Linear personal API key set as an environment variable:
+
+```
+LINEAR_API_KEY=lin_api_xxxxxxxxxxxxxxxxxxxx
+```
+
+Set this in your Railway project under **Variables**. Without it, the endpoint returns `503` and the form shows an "unavailable" message — the rest of the app works normally.
+
+To get a key: Linear → Settings → API → Personal API keys → **Create key**.
+
+---
+
 ## Configuration
 
 The server runs on port `3000` by default. To use a different port:
@@ -438,6 +462,7 @@ ice-breaker-games/
 │   ├── App.jsx             # Main app — WS connection, routing
 │   ├── Lobby.jsx           # Host/join room UI
 │   ├── VotingPhase.jsx     # Game selection voting
+│   ├── FeedbackModal.jsx   # Feedback form modal + Linear submission
 │   ├── index.css           # All styles
 │   └── games/
 │       ├── SnakeGame.jsx
@@ -450,8 +475,9 @@ ice-breaker-games/
 │       ├── TriviaGame.jsx
 │       └── HotTakeVotingGame.jsx
 ├── server/                 # Backend (Node.js + ws)
-│   ├── index.js            # HTTP + WebSocket server, room management
+│   ├── index.js            # HTTP + WebSocket server, room management, feedback API
 │   ├── engine.js           # Snake game engine
+│   ├── words-en.txt        # 172k-word English dictionary (Word Chain validation)
 │   ├── bomber-engine.js    # Bomber Arena engine
 │   ├── typeracer-engine.js # Type Racer engine
 │   ├── wordchain-engine.js # Word Chain engine
