@@ -1042,11 +1042,12 @@ button:disabled {
 /* ── Feedback Modal ──────────────────────────────────────────── */
 
 .coffee-btn {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-family: "Courier New", Courier, monospace;
   font-size: 11px;
   line-height: 1.2;
-  text-align: center;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 4px 10px;
