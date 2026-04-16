@@ -104,6 +104,69 @@ function readJsonBody(req, maxBytes = 4 * 1024 * 1024) {
   });
 }
 
+async function attachScreenshotToIssue(issueId, screenshot) {
+  // Parse the data URL: "data:<mime>;base64,<data>"
+  const match = screenshot.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+  if (!match) return;
+  const [, contentType, b64] = match;
+  const buffer = Buffer.from(b64, "base64");
+  const ext = contentType === "image/jpeg" ? "jpg" : contentType === "image/png" ? "png" : "webp";
+  const filename = `screenshot.${ext}`;
+
+  // Step 1 — ask Linear for a presigned S3 upload URL
+  const uploadMutation = `mutation FileUpload($contentType: String!, $filename: String!, $size: Int!) {
+    fileUpload(contentType: $contentType, filename: $filename, size: $size) {
+      uploadFile {
+        uploadUrl
+        assetUrl
+        headers { key value }
+      }
+    }
+  }`;
+
+  const uploadResp = await fetch("https://api.linear.app/graphql", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: LINEAR_API_KEY },
+    body: JSON.stringify({
+      query: uploadMutation,
+      variables: { contentType, filename, size: buffer.length },
+    }),
+  });
+  const uploadResult = await uploadResp.json();
+  if (uploadResult.errors || !uploadResult.data?.fileUpload?.uploadFile) {
+    console.warn("[feedback] fileUpload mutation failed:", uploadResult.errors?.[0]?.message);
+    return;
+  }
+
+  const { uploadUrl, assetUrl, headers: rawHeaders } = uploadResult.data.fileUpload.uploadFile;
+
+  // Step 2 — PUT the raw bytes directly to S3 using the presigned URL
+  const s3Headers = { "Content-Type": contentType };
+  for (const { key, value } of rawHeaders) s3Headers[key] = value;
+
+  const s3Resp = await fetch(uploadUrl, { method: "PUT", headers: s3Headers, body: buffer });
+  if (!s3Resp.ok) {
+    console.warn("[feedback] S3 upload failed:", s3Resp.status);
+    return;
+  }
+
+  // Step 3 — attach the uploaded asset to the Linear issue
+  const attachMutation = `mutation AttachmentCreate($input: AttachmentCreateInput!) {
+    attachmentCreate(input: $input) {
+      success
+    }
+  }`;
+
+  await fetch("https://api.linear.app/graphql", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: LINEAR_API_KEY },
+    body: JSON.stringify({
+      query: attachMutation,
+      variables: { input: { issueId, url: assetUrl, title: "Screenshot" } },
+    }),
+  });
+}
+
 async function createLinearIssue({ type, name, description, email, screenshot }) {
   const typeLabel = TYPE_DISPLAY[type];
   const titlePrefix = `[${typeLabel}]`;
@@ -117,8 +180,7 @@ async function createLinearIssue({ type, name, description, email, screenshot })
     `**Submitted by:** ${name}`,
     `**Email:** ${email || "Not provided"}`,
     `**Type:** ${typeLabel}`,
-    screenshot ? "\n**Screenshot:** Attached by submitter (not shown — base64 image)" : "",
-  ].filter(Boolean).join("\n");
+  ].join("\n");
 
   const mutation = `mutation CreateIssue($input: IssueCreateInput!) {
     issueCreate(input: $input) {
@@ -153,7 +215,16 @@ async function createLinearIssue({ type, name, description, email, screenshot })
   if (result.errors) throw new Error(result.errors[0].message);
   if (!result.data.issueCreate.success) throw new Error("Linear issue creation failed.");
 
-  return result.data.issueCreate.issue;
+  const issue = result.data.issueCreate.issue;
+
+  // Upload screenshot as a proper attachment (best-effort — never blocks issue creation)
+  if (screenshot) {
+    attachScreenshotToIssue(issue.id, screenshot).catch((err) =>
+      console.warn("[feedback] screenshot upload error:", err.message)
+    );
+  }
+
+  return issue;
 }
 
 function applySecurityHeaders(res) {
