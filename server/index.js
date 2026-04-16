@@ -54,7 +54,7 @@ const COMPRESSIBLE_EXTS = new Set([".html", ".js", ".css", ".json", ".svg"]);
 
 // ── Feedback rate limiting ──────────────────────────────────────
 const feedbackLimits = new Map(); // ip -> { count, resetAt }
-const FEEDBACK_MAX = 5;
+const FEEDBACK_MAX = 3;
 const FEEDBACK_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
 function isFeedbackRateLimited(ip) {
@@ -104,10 +104,10 @@ function readJsonBody(req, maxBytes = 4 * 1024 * 1024) {
   });
 }
 
-async function attachScreenshotToIssue(issueId, screenshot) {
+async function uploadScreenshotToLinear(screenshot) {
   // Parse the data URL: "data:<mime>;base64,<data>"
   const match = screenshot.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
-  if (!match) return;
+  if (!match) return null;
   const [, contentType, b64] = match;
   const buffer = Buffer.from(b64, "base64");
   const ext = contentType === "image/jpeg" ? "jpg" : contentType === "image/png" ? "png" : "webp";
@@ -135,7 +135,7 @@ async function attachScreenshotToIssue(issueId, screenshot) {
   const uploadResult = await uploadResp.json();
   if (uploadResult.errors || !uploadResult.data?.fileUpload?.uploadFile) {
     console.warn("[feedback] fileUpload mutation failed:", uploadResult.errors?.[0]?.message);
-    return;
+    return null;
   }
 
   const { uploadUrl, assetUrl, headers: rawHeaders } = uploadResult.data.fileUpload.uploadFile;
@@ -147,31 +147,26 @@ async function attachScreenshotToIssue(issueId, screenshot) {
   const s3Resp = await fetch(uploadUrl, { method: "PUT", headers: s3Headers, body: buffer });
   if (!s3Resp.ok) {
     console.warn("[feedback] S3 upload failed:", s3Resp.status);
-    return;
+    return null;
   }
 
-  // Step 3 — attach the uploaded asset to the Linear issue
-  const attachMutation = `mutation AttachmentCreate($input: AttachmentCreateInput!) {
-    attachmentCreate(input: $input) {
-      success
-    }
-  }`;
-
-  await fetch("https://api.linear.app/graphql", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: LINEAR_API_KEY },
-    body: JSON.stringify({
-      query: attachMutation,
-      variables: { input: { issueId, url: assetUrl, title: "Screenshot" } },
-    }),
-  });
+  return assetUrl;
 }
 
-async function createLinearIssue({ type, name, description, email, screenshot }) {
+async function createLinearIssue({ type, name, subject, description, email, screenshot }) {
   const typeLabel = TYPE_DISPLAY[type];
-  const titlePrefix = `[${typeLabel}]`;
-  const titleDesc = description.length > 70 ? description.slice(0, 70) + "…" : description;
-  const title = `${titlePrefix} ${titleDesc}`;
+  const title = `[${typeLabel}] ${subject}`;
+
+  // Upload screenshot first so we can embed inline
+  let screenshotMarkdown = "";
+  if (screenshot) {
+    try {
+      const assetUrl = await uploadScreenshotToLinear(screenshot);
+      if (assetUrl) screenshotMarkdown = `\n\n## Screenshot\n\n![Screenshot](${assetUrl})`;
+    } catch (err) {
+      console.warn("[feedback] screenshot upload error:", err.message);
+    }
+  }
 
   const body = [
     "## Description\n",
@@ -180,7 +175,8 @@ async function createLinearIssue({ type, name, description, email, screenshot })
     `**Submitted by:** ${name}`,
     `**Email:** ${email || "Not provided"}`,
     `**Type:** ${typeLabel}`,
-  ].join("\n");
+    screenshotMarkdown,
+  ].filter(Boolean).join("\n");
 
   const mutation = `mutation CreateIssue($input: IssueCreateInput!) {
     issueCreate(input: $input) {
@@ -215,16 +211,7 @@ async function createLinearIssue({ type, name, description, email, screenshot })
   if (result.errors) throw new Error(result.errors[0].message);
   if (!result.data.issueCreate.success) throw new Error("Linear issue creation failed.");
 
-  const issue = result.data.issueCreate.issue;
-
-  // Upload screenshot as a proper attachment (best-effort — never blocks issue creation)
-  if (screenshot) {
-    attachScreenshotToIssue(issue.id, screenshot).catch((err) =>
-      console.warn("[feedback] screenshot upload error:", err.message)
-    );
-  }
-
-  return issue;
+  return result.data.issueCreate.issue;
 }
 
 function applySecurityHeaders(res) {
@@ -297,12 +284,24 @@ const httpServer = createServer((req, res) => {
 
     readJsonBody(req)
       .then((data) => {
-        const { type, name, description, email, screenshot } = data;
+        // ── Spam checks (silent fake-success so bots think they won) ──
+        if (data.website) {
+          return "__honeypot__";
+        }
+        const formAge = Date.now() - (data.openedAt || 0);
+        if (!data.openedAt || formAge < 3000) {
+          return "__too_fast__";
+        }
+
+        const { type, name, subject, description, email, screenshot } = data;
         if (!["bug", "feature", "other"].includes(type)) {
           throw Object.assign(new Error("Invalid type."), { status: 400 });
         }
         if (!name || typeof name !== "string" || name.trim().length === 0 || name.length > 50) {
           throw Object.assign(new Error("Name is required (max 50 chars)."), { status: 400 });
+        }
+        if (!subject || typeof subject !== "string" || subject.trim().length === 0 || subject.length > 100) {
+          throw Object.assign(new Error("Subject is required (max 100 chars)."), { status: 400 });
         }
         if (!description || typeof description !== "string" || description.trim().length === 0 || description.length > 2000) {
           throw Object.assign(new Error("Description is required (max 2000 chars)."), { status: 400 });
@@ -317,6 +316,7 @@ const httpServer = createServer((req, res) => {
         return createLinearIssue({
           type,
           name: name.trim(),
+          subject: subject.trim(),
           description: description.trim(),
           email: email?.trim() || "",
           screenshot: screenshot || null,

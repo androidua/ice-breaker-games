@@ -11,8 +11,10 @@ function getApiUrl() {
 export default function FeedbackModal({ onClose }) {
   const [type, setType] = useState("");
   const [name, setName] = useState("");
+  const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
   const [email, setEmail] = useState("");
+  const [website, setWebsite] = useState(""); // honeypot
   const [screenshot, setScreenshot] = useState(null); // base64 data URL
   const [screenshotName, setScreenshotName] = useState("");
   const [errors, setErrors] = useState({});
@@ -20,6 +22,7 @@ export default function FeedbackModal({ onClose }) {
   const [submitted, setSubmitted] = useState(false);
   const [serverError, setServerError] = useState("");
   const fileRef = useRef(null);
+  const openedAt = useRef(Date.now());
 
   function handleScreenshot(e) {
     const file = e.target.files?.[0];
@@ -50,6 +53,8 @@ export default function FeedbackModal({ onClose }) {
     if (!type) errs.type = "Pick a type.";
     if (!name.trim()) errs.name = "Name is required.";
     else if (name.length > 50) errs.name = "Max 50 characters.";
+    if (!subject.trim()) errs.subject = "Subject is required.";
+    else if (subject.length > 100) errs.subject = "Max 100 characters.";
     if (!description.trim()) errs.description = "Description is required.";
     else if (description.length > 2000) errs.description = "Max 2000 characters.";
     if (email && email.length > 100) errs.email = "Max 100 characters.";
@@ -71,9 +76,12 @@ export default function FeedbackModal({ onClose }) {
         body: JSON.stringify({
           type,
           name: name.trim(),
+          subject: subject.trim(),
           description: description.trim(),
           email: email.trim() || undefined,
           screenshot: screenshot || undefined,
+          website: website || undefined,
+          openedAt: openedAt.current,
         }),
       });
       const data = await resp.json();
@@ -146,6 +154,19 @@ export default function FeedbackModal({ onClose }) {
           </div>
 
           <div className="feedback-field">
+            <label className="feedback-label">Subject *</label>
+            <input
+              type="text"
+              className={`feedback-input${errors.subject ? " invalid" : ""}`}
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              maxLength={100}
+              placeholder="Brief summary of your feedback"
+            />
+            {errors.subject && <div className="feedback-error">{errors.subject}</div>}
+          </div>
+
+          <div className="feedback-field">
             <label className="feedback-label">Description *</label>
             <textarea
               className={`feedback-input feedback-textarea${errors.description ? " invalid" : ""}`}
@@ -192,6 +213,19 @@ export default function FeedbackModal({ onClose }) {
               </label>
             )}
             {errors.screenshot && <div className="feedback-error">{errors.screenshot}</div>}
+          </div>
+
+          {/* Honeypot — hidden from humans, bots fill it in */}
+          <div className="feedback-hp-field" aria-hidden="true">
+            <label className="feedback-label">Website</label>
+            <input
+              type="text"
+              className="feedback-input"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              tabIndex={-1}
+              autoComplete="off"
+            />
           </div>
 
           {serverError && <div className="feedback-error feedback-server-error">{serverError}</div>}

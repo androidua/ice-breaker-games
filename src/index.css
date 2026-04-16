@@ -1274,6 +1274,15 @@ button:disabled {
   cursor: default;
 }
 
+.feedback-hp-field {
+  position: absolute;
+  left: -9999px;
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .feedback-success {
   text-align: center;
   padding: 32px 16px;
