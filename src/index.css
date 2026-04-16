@@ -1041,6 +1041,25 @@ button:disabled {
 
 /* ── Feedback Modal ──────────────────────────────────────────── */
 
+.coffee-btn {
+  display: block;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border: 1px solid #8b6914;
+  background: #f7f3ea;
+  color: #7a5c10;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.coffee-btn:hover {
+  background: #fef8e8;
+}
+
 .feedback-btn {
   font-size: 11px;
   padding: 4px 10px;

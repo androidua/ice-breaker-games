@@ -208,6 +208,14 @@ export default function App() {
         </div>
         <div className="footer-right">
           {room?.currentGame === "snake" && <span>WASD / Arrows to move</span>}
+          <a
+            href="https://buymeacoffee.com/huddleplayroom"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="coffee-btn"
+          >
+            ☕ Buy me a coffee
+          </a>
           <button type="button" className="feedback-btn" onClick={() => setFeedbackOpen(true)}>
             💬 Feedback
           </button>
