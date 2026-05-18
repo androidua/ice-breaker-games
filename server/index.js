@@ -718,74 +718,83 @@ function handleGameAction(ws, clientId, action) {
   const room = findRoomByPlayer(clientId);
   if (!room || room.status !== "playing" || !action) return;
 
-  switch (room.currentGame) {
-    case "truths":
-      room.game = handleTruthsAction(room.game, clientId, action);
-      if (room.game.status === "voting" && allTruthsVotesIn(room.game)) {
-        triggerTruthsReveal(room);
-      } else {
-        broadcastGameState(room);
-      }
-      break;
-    case "emoji": {
-      const prevEmojiStatus = room.game.status;
-      room.game = handleEmojiAction(room.game, clientId, action);
-      // Emojis submitted: composing → guessing — stop the compose timer
-      if (prevEmojiStatus === "composing" && room.game.status === "guessing") {
-        stopLoop(room);
-      }
-      if (room.game.status === "guessing" && (allEmojiGuessersCorrect(room.game) || allEmojiGuessersExhausted(room.game))) {
-        triggerEmojiReveal(room);
-      } else {
-        broadcastGameState(room);
-      }
-      break;
-    }
-    case "sketch":
-      room.game = handleSketchAction(room.game, clientId, action);
-      // revealIn countdown is started by the engine when first correct guess arrives;
-      // the draw timer tick will handle the transition to reveal.
-      broadcastGameState(room);
-      break;
-    case "trivia":
-      // Host starts the next set after round_complete
-      if (action.kind === "nextSet" && clientId === room.hostId && room.game.status === "round_complete") {
-        room.game = nextTriviaRound(room.game, Math.random);
-        broadcastGameState(room);
-        startTriviaTick(room);
+  try {
+    switch (room.currentGame) {
+      case "truths":
+        room.game = handleTruthsAction(room.game, clientId, action);
+        if (room.game.status === "voting" && allTruthsVotesIn(room.game)) {
+          triggerTruthsReveal(room);
+        } else {
+          broadcastGameState(room);
+        }
+        break;
+      case "emoji": {
+        const prevEmojiStatus = room.game.status;
+        room.game = handleEmojiAction(room.game, clientId, action);
+        // Emojis submitted: composing → guessing — stop the compose timer
+        if (prevEmojiStatus === "composing" && room.game.status === "guessing") {
+          stopLoop(room);
+        }
+        if (room.game.status === "guessing" && (allEmojiGuessersCorrect(room.game) || allEmojiGuessersExhausted(room.game))) {
+          triggerEmojiReveal(room);
+        } else {
+          broadcastGameState(room);
+        }
         break;
       }
-      room.game = handleTriviaAction(room.game, clientId, action);
-      if (allAnswered(room.game)) {
-        handleTriviaReveal(room);
-      } else {
+      case "sketch":
+        room.game = handleSketchAction(room.game, clientId, action);
+        // revealIn countdown is started by the engine when first correct guess arrives;
+        // the draw timer tick will handle the transition to reveal.
         broadcastGameState(room);
-      }
-      break;
-    case "typeracer":
-      room.game = handleTyperacerAction(room.game, clientId, action);
-      if (room.game.status === "racing" && allTyperacerFinished(room.game)) {
-        triggerTyperacerReveal(room);
-      } else {
+        break;
+      case "trivia":
+        // Host starts the next set after round_complete
+        if (action.kind === "nextSet" && clientId === room.hostId && room.game.status === "round_complete") {
+          room.game = nextTriviaRound(room.game, Math.random);
+          broadcastGameState(room);
+          startTriviaTick(room);
+          break;
+        }
+        room.game = handleTriviaAction(room.game, clientId, action);
+        if (allAnswered(room.game)) {
+          handleTriviaReveal(room);
+        } else {
+          broadcastGameState(room);
+        }
+        break;
+      case "typeracer":
+        room.game = handleTyperacerAction(room.game, clientId, action);
+        if (room.game.status === "racing" && allTyperacerFinished(room.game)) {
+          triggerTyperacerReveal(room);
+        } else {
+          broadcastGameState(room);
+        }
+        break;
+      case "wordchain":
+        room.game = handleWordChainAction(room.game, clientId, action);
         broadcastGameState(room);
-      }
-      break;
-    case "wordchain":
-      room.game = handleWordChainAction(room.game, clientId, action);
-      broadcastGameState(room);
-      break;
-    case "bomber":
-      room.game = handleBomberAction(room.game, clientId, action);
-      // No broadcast here — state is broadcast on every tick
-      break;
-    case "hottake":
-      room.game = handleHotTakeAction(room.game, clientId, action);
-      if (room.game.status === "voting" && allHotTakeVotesIn(room.game)) {
-        triggerHotTakeReveal(room);
-      } else {
-        broadcastGameState(room);
-      }
-      break;
+        break;
+      case "bomber":
+        room.game = handleBomberAction(room.game, clientId, action);
+        // No broadcast here — state is broadcast on every tick
+        break;
+      case "hottake":
+        room.game = handleHotTakeAction(room.game, clientId, action);
+        if (room.game.status === "voting" && allHotTakeVotesIn(room.game)) {
+          triggerHotTakeReveal(room);
+        } else {
+          broadcastGameState(room);
+        }
+        break;
+    }
+  } catch (err) {
+    // Contain blast radius: a throw here would otherwise kill the entire Node
+    // process and every active room, not just this player's session.
+    console.error(`[gameAction] ${room.currentGame} error:`, err && err.message);
+    try {
+      ws.send(JSON.stringify({ type: "error", message: "Action failed." }));
+    } catch { /* socket already closed */ }
   }
 }
 
@@ -1308,3 +1317,13 @@ function gracefulShutdown() {
 }
 process.on("SIGTERM", gracefulShutdown);
 process.on("SIGINT", gracefulShutdown);
+
+// Last-resort handlers — keep the process alive on stray errors so a single
+// bug doesn't take every active room down with it. Restart-on-crash is fine
+// in principle, but in-memory state means a restart = total session loss.
+process.on("uncaughtException", (err) => {
+  console.error("[uncaughtException]", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", reason);
+});

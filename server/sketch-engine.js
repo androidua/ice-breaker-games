@@ -211,6 +211,7 @@ function addStroke(state, playerId, points, color) {
   if (state.status !== "drawing") return state;
   if (playerId !== state.drawerId) return state;
   if (!Array.isArray(points) || points.length === 0) return state;
+  if (state.strokes.length >= 1000) return state;
 
   const stroke = { points: points.slice(0, 500), color: color || "#2a2a2a" };
   return { ...state, strokes: [...state.strokes, stroke] };

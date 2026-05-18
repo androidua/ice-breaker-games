@@ -1,0 +1,17 @@
+{
+  "name": "Huddle Play Room",
+  "short_name": "Huddle",
+  "description": "Free browser-based multiplayer party games for groups of 2-8.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f1ea",
+  "theme_color": "#1a1a2e",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

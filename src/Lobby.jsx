@@ -46,6 +46,17 @@ export default function Lobby({ connection, error, send }) {
         </div>
         {error && <div className="error">{error}</div>}
       </div>
+      <section className="lobby-intro">
+        <p>
+          Free browser-based party games for groups of 2 to 8 — pick a game,
+          share the room code, play instantly. No install, no signup.
+        </p>
+        <p>
+          Nine games: Snake Arena, Bomber Arena, Sketch &amp; Guess, Emoji
+          Storytelling, Speed Trivia, Type Racer, Word Chain, Two Truths &amp;
+          a Lie, Hot Take Voting.
+        </p>
+      </section>
     </main>
   );
 }

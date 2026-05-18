@@ -107,6 +107,47 @@ function createClient(name) {
   });
 }
 
+/**
+ * From a "playing" state, end the current game, vote for the next, and
+ * assert the next game actually starts with the correct gameType. Used to
+ * smoke-test all game engines end-to-end via the real WebSocket flow.
+ */
+async function endAndStart(host, player2, gameName) {
+  host.send({ type: "endGame" });
+
+  // Server transitions back to voting; both clients get room + vote_state
+  await host.waitFor("room");
+  await host.waitFor("vote_state");
+  await player2.waitFor("room");
+  await player2.waitFor("vote_state");
+
+  // Drain any leftover game-state messages from the previous game so we
+  // don't accidentally read one as the new game's first broadcast
+  host.messages.length = 0;
+  player2.messages.length = 0;
+
+  // Both players vote — voting resolves immediately when all votes are in
+  host.send({ type: "vote", game: gameName });
+  await host.waitFor("vote_state");
+  player2.send({ type: "vote", game: gameName });
+
+  const playingRoom = await host.waitFor("room");
+  assert(
+    playingRoom.room.currentGame === gameName,
+    `${gameName}: room.currentGame === "${gameName}"`
+  );
+  assert(
+    playingRoom.room.status === "playing",
+    `${gameName}: room.status === "playing"`
+  );
+
+  const state = await host.waitFor("state");
+  assert(
+    state.state && state.state.gameType === gameName,
+    `${gameName}: state.gameType === "${gameName}"`
+  );
+}
+
 // ── Main test flow ───────────────────────────────────────────────
 
 async function runTests() {
@@ -242,6 +283,24 @@ async function runTests() {
     // Player 2 should also be in the game
     const p2PlayingRoom = await player2.waitFor("room");
     assert(p2PlayingRoom.room.status === "playing", "Player 2 sees status 'playing'");
+
+    // ── Test: Each remaining game starts via the full voting flow ───
+    // Snake is already running; cycle through the other eight engines.
+
+    console.log(colours.bold("\nTest: Remaining games start cleanly"));
+
+    for (const game of [
+      "truths",
+      "emoji",
+      "sketch",
+      "trivia",
+      "typeracer",
+      "wordchain",
+      "bomber",
+      "hottake",
+    ]) {
+      await endAndStart(host, player2, game);
+    }
 
     // ── Test: Error handling ────────────────────────────────────
 

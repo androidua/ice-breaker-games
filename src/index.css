@@ -8,6 +8,12 @@
   box-sizing: border-box;
 }
 
+/* Keyboard-focus ring — uses the existing steel-blue player colour for harmony */
+:focus-visible {
+  outline: 2px solid #3d5a80;
+  outline-offset: 2px;
+}
+
 /* 16px minimum prevents iOS Safari from zooming the page when an input is focused */
 input {
   font-size: 16px;
@@ -89,7 +95,25 @@ body {
 
 .lobby {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.lobby-intro {
+  max-width: 480px;
+  text-align: center;
+  font-size: 14px;
+  color: #5a5a5a;
+  line-height: 1.5;
+}
+
+.lobby-intro p {
+  margin: 0 0 12px;
+}
+
+.lobby-intro p:last-child {
+  margin-bottom: 0;
 }
 
 /* Positioning context for the swipe-hint overlay */
