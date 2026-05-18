@@ -242,6 +242,23 @@ button:disabled {
   cursor: default;
 }
 
+.btn-primary {
+  background: #2a2a2a;
+  color: #f7f3ea;
+  border-color: #2a2a2a;
+}
+
+.btn-primary:hover {
+  background: #1a1a1a;
+}
+
+.btn-primary:disabled {
+  background: #888;
+  border-color: #888;
+  color: #f7f3ea;
+  opacity: 0.6;
+}
+
 .players {
   display: grid;
   gap: 6px;

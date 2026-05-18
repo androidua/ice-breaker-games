@@ -566,7 +566,13 @@ export default function EmojiGame({ game, room, me, send }) {
             {emojiInput.length > 0 && (
               <button type="button" onClick={() => setEmojiInput("")}>Clear</button>
             )}
-            <button type="button" onClick={handleSubmitEmojis} disabled={emojiInput.trim().length === 0}>
+            <button
+              type="button"
+              className="btn-primary"
+              style={{ marginLeft: "auto" }}
+              onClick={handleSubmitEmojis}
+              disabled={emojiInput.trim().length === 0}
+            >
               Send Emojis
             </button>
           </div>
