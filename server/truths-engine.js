@@ -75,7 +75,7 @@ function submitTruthsVote(state, playerId, index) {
 
 export function allTruthsVotesIn(state) {
   const voterCount = state.playerIds.filter((id) => id !== state.presenterId).length;
-  return state.votes.size >= voterCount;
+  return voterCount > 0 && state.votes.size >= voterCount;
 }
 
 export function revealTruths(state) {

@@ -104,7 +104,9 @@ export default function TruthsGame({ game, room, me, send }) {
         <div className="panel truths-panel">
           <div className="status">
             {isPresenter
-              ? "Players are voting on which is the lie..."
+              ? game.voterCount === 0
+                ? "No other players to vote — reveal whenever you're ready."
+                : "Players are voting on which is the lie..."
               : `Which statement by ${presenterName} is the lie?`}
           </div>
           <div className="truths-cards">
@@ -120,7 +122,19 @@ export default function TruthsGame({ game, room, me, send }) {
               </button>
             ))}
           </div>
-          <div className="status">{game.voteCount}/{game.voterCount} voted</div>
+          {game.voterCount > 0 && (
+            <div className="status">{game.voteCount}/{game.voterCount} voted</div>
+          )}
+          {isPresenter && (
+            <div className="actions">
+              <button
+                type="button"
+                onClick={() => send({ type: "gameAction", action: { kind: "revealNow" } })}
+              >
+                Reveal now
+              </button>
+            </div>
+          )}
         </div>
       )}
 

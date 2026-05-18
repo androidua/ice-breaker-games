@@ -721,6 +721,12 @@ function handleGameAction(ws, clientId, action) {
   try {
     switch (room.currentGame) {
       case "truths":
+        if (action.kind === "revealNow" &&
+            room.game.status === "voting" &&
+            clientId === room.game.presenterId) {
+          triggerTruthsReveal(room);
+          break;
+        }
         room.game = handleTruthsAction(room.game, clientId, action);
         if (room.game.status === "voting" && allTruthsVotesIn(room.game)) {
           triggerTruthsReveal(room);
