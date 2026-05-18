@@ -68,7 +68,7 @@ Hosted on **Railway**, auto-deploying from GitHub on every push.
 
 ### Server (`server/`)
 
-`index.js` (~890 lines) is the entire server: HTTP static file serving, WebSocket lifecycle, room management, message routing, timer orchestration, and game dispatch. The `rooms` Map is the single source of truth.
+`index.js` (~1300 lines) is the entire server: HTTP static file serving, WebSocket lifecycle, room management, message routing, timer orchestration, and game dispatch. The `rooms` Map is the single source of truth.
 
 Each game has a **pure engine module** (no side effects, no timers, no WebSocket access):
 
@@ -119,7 +119,7 @@ Two tiers tracked separately:
 - Snake ticks every 120ms
 - Bomber Arena ticks every 100ms (movement) and 1000ms (round timer)
 - All other game/voting timers tick every 1000ms
-- WebSocket ping/pong heartbeat runs every 25s to keep connections alive through proxies and load balancers
+- WebSocket ping/pong heartbeat runs every 15s to keep connections alive through proxies and load balancers
 
 ## Adding a New Game
 
@@ -143,10 +143,18 @@ Current protections:
 - Room capacity enforcement (max 8)
 - Player name length clamping
 - JSON parse wrapped in try-catch
+- Per-client WebSocket rate limit (60 msg/sec sliding window)
+- 16 KB max WebSocket payload
+- Origin verification on WebSocket handshake (rejects cross-site connections)
+- `handleGameAction` switch wrapped in try/catch so an engine throw can't take down the whole server
+- `process.on('uncaughtException')` + `unhandledRejection` last-resort handlers
+- Full security headers on HTTP responses (CSP, HSTS, X-Frame-Options, Permissions-Policy, Referrer-Policy)
+- HTTPS canonical redirect
+- Sketch round capped at 1000 strokes (defensive memory guard)
+- Feedback API: per-IP rate limit, honeypot, time-trap, screenshot size cap
 - No file system writes, no database, no external API calls
 
 Known gaps to be aware of:
-- **No rate limiting on WebSocket messages.** A client could spam messages. Be cautious about adding game logic that is expensive per-message.
 - **No reconnection handling.** If a player's WebSocket drops, they lose their session. The frontend does not attempt to reconnect.
 - **No input sanitisation beyond length clamping.** Player names and text inputs are JSON-serialised (not rendered as raw HTML), so XSS risk is low. Any future feature rendering user text as HTML must sanitise it.
 - **In-memory state means zero persistence.** Server restart (including Railway redeploys) loses all rooms and scores.
@@ -171,7 +179,21 @@ The app is designed for phone use. Key patterns to maintain:
 `test/smoke-test.js` starts the server on port 9876, connects two WebSocket clients, and runs through the core flow: host a room, join it, start voting, vote for a game, verify the game starts, test error handling, and test disconnect cleanup. Run with `npm test`.
 
 A **pre-push git hook** (`.git/hooks/pre-push`) runs the smoke test automatically before every `git push`. If any test fails, the push is blocked. Bypass with `git push --no-verify` if needed.
-Note: `.git/hooks/` is not committed to the repo. On a fresh clone, recreate the hook manually — it should run `npm test` and exit 1 on failure.
+
+After tests pass, if the push targets `refs/heads/main` the hook also background-spawns `scripts/verify-deploy.js`. That script polls Railway for the deployment of the pushed SHA, then curls `huddleplayroom.com` to confirm the new code is live. Results land in `/tmp/hpr-deploy-verify-<short-sha>.log` and a macOS notification fires when complete (~30–90s after push).
+
+Note: `.git/hooks/` is not committed to the repo. On a fresh clone, recreate `pre-push` manually — copy the working version from a teammate or from this repo's source-of-truth location.
+
+### Manual deploy verification
+
+`npm run verify-deploy` runs the same Railway poll + live URL check against the local HEAD commit. Use it to spot-check whether a recent push made it live, or pass an explicit SHA:
+
+```bash
+npm run verify-deploy             # checks current HEAD
+node scripts/verify-deploy.js c14e8da   # checks a specific commit
+```
+
+Requires the `railway` CLI installed, logged in, and the project linked (`railway link --project 2df6c931-bddb-4fd3-b576-ffbebfa09373 --environment production --service ice-breaker-games`).
 
 ### AI-Powered Pre-Push Review
 
