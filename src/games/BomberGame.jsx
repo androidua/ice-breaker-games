@@ -1,4 +1,11 @@
 import { useEffect, useRef } from "react";
+import GameInstructions from "../components/GameInstructions";
+
+const RULES = [
+  "Move with ↑↓←→ or WASD on keyboard, or the D-pad on mobile",
+  "Press Space (or the 💣 button) to drop a bomb",
+  "💣 power-up: +1 bomb · 🔥 power-up: longer flame",
+];
 
 const WALL = 1;
 const BREAKABLE = 2;
@@ -222,9 +229,12 @@ export default function BomberGame({ game, room, me, send }) {
     <main className="game-stage">
       <div className="game-header">
         <span>Round {round}</span>
-        {timer != null && (
-          <span className={`voting-timer${timer <= 15 ? " timer-urgent" : ""}`}>{timer}s</span>
-        )}
+        <div className="game-header-right">
+          <GameInstructions title="Bomber Arena" rules={RULES} />
+          {timer != null && (
+            <span className={`voting-timer${timer <= 15 ? " timer-urgent" : ""}`}>{timer}s</span>
+          )}
+        </div>
       </div>
 
       <canvas ref={canvasRef} className="bomber-canvas" />
@@ -261,11 +271,6 @@ export default function BomberGame({ game, room, me, send }) {
           <span>Points: {myScore}</span>
         </div>
       )}
-
-      <p className="game-instructions">
-        <span className="hint-kb"><kbd>↑↓←→</kbd> / <kbd>WASD</kbd> move · <kbd>Space</kbd> drop bomb · 💣 power-up = +1 bomb · 🔥 power-up = longer flame</span>
-        <span className="hint-touch">D-pad to move · 💣 button to drop bomb · 💣 power-up = +1 bomb · 🔥 power-up = longer flame</span>
-      </p>
 
       <div className="bomber-scoreboard">
         {Object.values(game.players || {})

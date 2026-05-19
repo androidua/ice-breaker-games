@@ -1,4 +1,10 @@
 import { useState, useEffect, useRef } from "react";
+import GameInstructions from "../components/GameInstructions";
+
+const RULES = [
+  "Type the paragraph as fast and accurately as you can",
+  "Mistakes are penalised but won't block you from finishing",
+];
 
 export default function TyperacerGame({ game, room, me, send }) {
   const [typed, setTyped] = useState("");
@@ -35,15 +41,18 @@ export default function TyperacerGame({ game, room, me, send }) {
     <main className="game-stage">
       <div className="game-header">
         <span>Round {game.round}</span>
-        {game.closingCountdown != null ? (
-          <span className={`voting-timer${game.closingCountdown <= 5 ? " timer-urgent" : ""}`}>
-            {game.closingCountdown}s
-          </span>
-        ) : (
-          game.timer != null && (
-            <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
-          )
-        )}
+        <div className="game-header-right">
+          <GameInstructions title="Type Racer" rules={RULES} />
+          {game.closingCountdown != null ? (
+            <span className={`voting-timer${game.closingCountdown <= 5 ? " timer-urgent" : ""}`}>
+              {game.closingCountdown}s
+            </span>
+          ) : (
+            game.timer != null && (
+              <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+            )
+          )}
+        </div>
       </div>
 
       {game.status === "racing" && (
@@ -159,10 +168,6 @@ export default function TyperacerGame({ game, room, me, send }) {
           </button>
         </div>
       )}
-
-      <p className="game-instructions">
-        Type the paragraph as fast and accurately as you can · Mistakes are penalised but won't block you from finishing
-      </p>
 
       <Scoreboard game={game} room={room} />
     </main>

@@ -1,4 +1,11 @@
 import { useState, useRef, useEffect, useMemo } from "react";
+import GameInstructions from "../components/GameInstructions";
+
+const RULES = [
+  "Storyteller picks emojis to describe a secret prompt",
+  "Others type their best guess",
+  "Faster correct answers earn more points",
+];
 
 const EMOJI_CATEGORIES = [
   {
@@ -495,9 +502,12 @@ export default function EmojiGame({ game, room, me, send }) {
     <main className="game-stage">
       <div className="game-header">
         <span>Round {game.round}</span>
-        {game.timer != null && (
-          <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
-        )}
+        <div className="game-header-right">
+          <GameInstructions title="Emoji Storytelling" rules={RULES} />
+          {game.timer != null && (
+            <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+          )}
+        </div>
       </div>
 
       {game.status === "composing" && isStoryteller && (
@@ -644,10 +654,6 @@ export default function EmojiGame({ game, room, me, send }) {
           </button>
         </div>
       )}
-
-      <p className="game-instructions">
-        Storyteller picks emojis to describe a secret prompt · Others type their best guess · Faster correct answers earn more points
-      </p>
 
       <Scoreboard game={game} room={room} />
     </main>

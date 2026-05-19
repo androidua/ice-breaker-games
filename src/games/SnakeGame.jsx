@@ -1,4 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import GameInstructions from "../components/GameInstructions";
+
+const RULES = [
+  "Steer with ↑↓←→ or WASD on keyboard, or swipe on mobile",
+  "Eat food to grow",
+  "Avoid walls and other snakes",
+];
 
 export default function SnakeGame({ game, room, me, send }) {
   const boardRef = useRef(null);
@@ -104,7 +111,10 @@ export default function SnakeGame({ game, room, me, send }) {
     <main className="game-stage">
       <div className="game-header">
         <span>Round {roundNum}</span>
-        {roundOver && <span className="voting-timer timer-urgent">Round Over</span>}
+        <div className="game-header-right">
+          <GameInstructions title="Snake Arena" rules={RULES} />
+          {roundOver && <span className="voting-timer timer-urgent">Round Over</span>}
+        </div>
       </div>
       <div className="stage">
         <div className="board-wrapper">
@@ -133,9 +143,6 @@ export default function SnakeGame({ game, room, me, send }) {
           <Scoreboard game={game} room={room} />
         </div>
       </div>
-      <p className="game-instructions">
-        <kbd>↑↓←→</kbd> or <kbd>WASD</kbd> to steer · Swipe on mobile · Eat food to grow · Avoid walls &amp; other snakes
-      </p>
       <section className="dpad" aria-label="On-screen controls">
         <button type="button" className="dpad-up" aria-label="Move up" onClick={() => send({ type: "input", dir: "UP" })}>↑</button>
         <button type="button" className="dpad-left" aria-label="Move left" onClick={() => send({ type: "input", dir: "LEFT" })}>←</button>

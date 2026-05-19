@@ -1,4 +1,11 @@
 import { useEffect, useState } from "react";
+import GameInstructions from "../components/GameInstructions";
+
+const RULES = [
+  "Vote agree or disagree before time runs out",
+  "Majority side gets +1 point",
+  "Ties give no points",
+];
 
 export default function HotTakeVotingGame({ game, room, me, send }) {
   const [selectedVote, setSelectedVote] = useState(null);
@@ -34,9 +41,12 @@ export default function HotTakeVotingGame({ game, room, me, send }) {
     <main className="game-stage">
       <div className="game-header">
         <span>Round {game.round}</span>
-        {game.timer != null && (
-          <span className={`voting-timer${game.timer <= 5 ? " timer-urgent" : ""}`}>{game.timer}s</span>
-        )}
+        <div className="game-header-right">
+          <GameInstructions title="Hot Take" rules={RULES} />
+          {game.timer != null && (
+            <span className={`voting-timer${game.timer <= 5 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+          )}
+        </div>
       </div>
 
       <div className="panel hottake-panel">
@@ -101,10 +111,6 @@ export default function HotTakeVotingGame({ game, room, me, send }) {
           </button>
         </div>
       )}
-
-      <p className="game-instructions">
-        Vote agree or disagree before time runs out · Majority side gets +1 point · Ties give no points
-      </p>
 
       <Scoreboard game={game} room={room} />
     </main>

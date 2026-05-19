@@ -1,4 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import GameInstructions from "../components/GameInstructions";
+
+const RULES = [
+  "Tap the correct answer before time runs out",
+  "Answer faster to score more points",
+  "Most points after all sets wins",
+];
 
 export default function TriviaGame({ game, room, me, send }) {
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -34,9 +41,12 @@ export default function TriviaGame({ game, room, me, send }) {
             ? `Set ${game.triviaRound || 1} Complete`
             : `Q${game.questionIndex + 1}/${game.totalQuestions} (Set ${game.triviaRound || 1})`}
         </span>
-        {game.timer != null && (
-          <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
-        )}
+        <div className="game-header-right">
+          <GameInstructions title="Speed Trivia" rules={RULES} />
+          {game.timer != null && (
+            <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+          )}
+        </div>
       </div>
 
       {game.status === "round_complete" ? (
@@ -101,10 +111,6 @@ export default function TriviaGame({ game, room, me, send }) {
           )}
         </div>
       )}
-
-      <p className="game-instructions">
-        Tap the correct answer before time runs out · Answer faster to score more points · Most points after all sets wins
-      </p>
 
       <Scoreboard game={game} room={room} />
     </main>

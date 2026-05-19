@@ -1,4 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import GameInstructions from "../components/GameInstructions";
+
+const RULES = [
+  "Drawer sketches a secret word",
+  "First player to guess correctly wins the round",
+  "One point per round win",
+];
 
 const CANVAS_SIZE = 400;
 const LINE_WIDTH = 3;
@@ -123,9 +130,12 @@ export default function SketchGame({ game, room, me, send }) {
     <main className="game-stage">
       <div className="game-header">
         <span>Round {game.round}</span>
-        {game.timer != null && (
-          <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
-        )}
+        <div className="game-header-right">
+          <GameInstructions title="Sketch & Guess" rules={RULES} />
+          {game.timer != null && (
+            <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+          )}
+        </div>
       </div>
 
       {/* Status line — above the grid, full width */}
@@ -215,9 +225,6 @@ export default function SketchGame({ game, room, me, send }) {
         </div>
       )}
 
-      <p className="game-instructions">
-        Drawer sketches a secret word · First player to guess correctly wins the round · One point per round win
-      </p>
     </main>
   );
 }

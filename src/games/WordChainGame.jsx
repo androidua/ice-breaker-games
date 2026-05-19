@@ -1,4 +1,11 @@
 import { useState, useEffect, useRef } from "react";
+import GameInstructions from "../components/GameInstructions";
+
+const RULES = [
+  "Each word must start with the last letter of the previous word",
+  "Can't think of one in time? You're eliminated",
+  "Last player standing wins",
+];
 
 export default function WordChainGame({ game, room, me, send }) {
   const [wordInput, setWordInput] = useState("");
@@ -33,9 +40,12 @@ export default function WordChainGame({ game, room, me, send }) {
     <main className="game-stage">
       <div className="game-header">
         <span>Round {game.round}</span>
-        {game.status === "playing" && (
-          <span className={`voting-timer${game.timer <= 5 ? " timer-urgent" : ""}`}>{game.timer}s</span>
-        )}
+        <div className="game-header-right">
+          <GameInstructions title="Word Chain" rules={RULES} />
+          {game.status === "playing" && (
+            <span className={`voting-timer${game.timer <= 5 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+          )}
+        </div>
       </div>
 
       {game.status === "playing" && (
@@ -133,10 +143,6 @@ export default function WordChainGame({ game, room, me, send }) {
           </button>
         </div>
       )}
-
-      <p className="game-instructions">
-        Each word must start with the last letter of the previous word · Can't think of one in time? You're eliminated · Last player standing wins
-      </p>
 
       <Scoreboard game={game} room={room} />
     </main>

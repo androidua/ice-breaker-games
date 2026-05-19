@@ -1,4 +1,11 @@
 import { useMemo, useState } from "react";
+import GameInstructions from "../components/GameInstructions";
+
+const RULES = [
+  "The presenter writes 2 truths and 1 lie",
+  "Everyone else votes on which statement is the lie",
+  "Correct guesses earn points",
+];
 
 // Deterministic shuffle: same player + same round always gives same order.
 // This lets each player see statements in a unique order without needing server changes.
@@ -56,9 +63,12 @@ export default function TruthsGame({ game, room, me, send }) {
     <main className="game-stage">
       <div className="game-header">
         <span>Round {game.round}</span>
-        {game.timer != null && (
-          <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
-        )}
+        <div className="game-header-right">
+          <GameInstructions title="Two Truths & a Lie" rules={RULES} />
+          {game.timer != null && (
+            <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+          )}
+        </div>
       </div>
 
       {game.status === "submitting" && isPresenter && (
@@ -165,10 +175,6 @@ export default function TruthsGame({ game, room, me, send }) {
           </button>
         </div>
       )}
-
-      <p className="game-instructions">
-        The presenter writes 2 truths and 1 lie · Everyone else votes on which statement is the lie · Correct guesses earn points
-      </p>
 
       <Scoreboard game={game} room={room} />
     </main>
