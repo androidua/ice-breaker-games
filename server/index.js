@@ -392,6 +392,10 @@ function isRateLimited(clientId) {
 const wss = new WebSocketServer({
   server: httpServer,
   maxPayload: 16 * 1024, // 16 KB — no legitimate game message is larger
+  perMessageDeflate: {
+    zlibDeflateOptions: { level: 1 }, // fastest compression — server CPU is the budget, not bytes
+    threshold: 128, // skip compression for tiny messages (ping/pong, small actions)
+  },
   verifyClient: ({ origin }) => {
     if (!origin) return true; // server-to-server, health checks
     return origin === `https://${CANONICAL_HOST}` || origin.includes("localhost");
