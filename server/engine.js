@@ -61,6 +61,8 @@ export function stepGame(state, rng) {
   const nextBodies = new Map();
   const ateFood = new Set();
 
+  const wallHits = new Set();
+
   state.snakes.forEach((snake, id) => {
     if (!snake.alive) {
       next.set(id, { ...snake });
@@ -73,6 +75,18 @@ export function stepGame(state, rng) {
 
     const head = snake.body[0];
     const nextHead = { x: head.x + dir.x, y: head.y + dir.y };
+
+    // Wall hit: snake doesn't advance into the OOB cell. Body stays where it is;
+    // the snake is marked dead in the death pass below. This keeps every
+    // rendered segment in-bounds.
+    if (hitsWall(nextHead, state.rows, state.cols)) {
+      wallHits.add(id);
+      nextHeads.set(id, head);
+      nextBodies.set(id, [...snake.body]);
+      next.set(id, { ...snake, direction: dir, pendingDirection: null });
+      return;
+    }
+
     const willEat = state.food && nextHead.x === state.food.x && nextHead.y === state.food.y;
     const willGrow = willEat || snake.growth > 0;
     const body = [nextHead, ...snake.body];
@@ -91,13 +105,7 @@ export function stepGame(state, rng) {
     });
   });
 
-  const deaths = new Set();
-
-  next.forEach((snake) => {
-    if (!snake.alive) return;
-    const head = nextHeads.get(snake.id);
-    if (hitsWall(head, state.rows, state.cols)) deaths.add(snake.id);
-  });
+  const deaths = new Set(wallHits);
 
   const headCounts = new Map();
   nextHeads.forEach((head) => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import GameInstructions from "../components/GameInstructions";
 
 const RULES = [
@@ -63,40 +63,6 @@ export default function SnakeGame({ game, room, me, send }) {
     }
   }, [game?.status]);
 
-  const snakeCells = useMemo(() => {
-    const map = new Map();
-    if (!game?.snakes) return map;
-    game.snakes.forEach((snake) => {
-      snake.body.forEach(([x, y], index) => {
-        const key = `${x},${y}`;
-        map.set(key, { color: snake.color, head: index === 0, alive: snake.alive });
-      });
-    });
-    return map;
-  }, [game]);
-
-  const boardCells = useMemo(() => {
-    if (!game) return [];
-    const cells = [];
-    for (let y = 0; y < game.rows; y += 1) {
-      for (let x = 0; x < game.cols; x += 1) {
-        const key = `${x},${y}`;
-        const sc = snakeCells.get(key);
-        let className = "cell";
-        let style = undefined;
-        if (sc) {
-          className += " snake";
-          if (sc.head) className += " head";
-          if (!sc.alive) className += " dead";
-          style = { background: sc.color };
-        }
-        if (game.food && key === `${game.food[0]},${game.food[1]}`) className += " food";
-        cells.push(<div key={key} className={className} style={style} />);
-      }
-    }
-    return cells;
-  }, [game, snakeCells]);
-
   const isHost = room?.hostId === me.id;
   const roundOver = game?.status === "gameover" || game?.status === "win";
   const roundNum = 1 + Object.values(room?.roundWins || {}).reduce((max, v) => Math.max(max, v), 0);
@@ -106,6 +72,11 @@ export default function SnakeGame({ game, room, me, send }) {
     if (game?.status === "win") return "Board Full — Round Over!";
     return "Use arrow keys or WASD";
   })();
+
+  const rows = game?.rows || 30;
+  const cols = game?.cols || 30;
+  const cellWidthPct = 100 / cols;
+  const cellHeightPct = 100 / rows;
 
   return (
     <main className="game-stage">
@@ -121,9 +92,44 @@ export default function SnakeGame({ game, room, me, send }) {
           <div
             ref={boardRef}
             className="board"
-            style={{ gridTemplateColumns: `repeat(${game?.cols || 20}, 1fr)` }}
+            style={{
+              "--cols": cols,
+              "--rows": rows,
+            }}
           >
-            {boardCells}
+            <div className="board-overlay">
+              {game?.snakes?.flatMap((snake) =>
+                snake.body.map(([x, y], i) => {
+                  // Defensive clamp — engine should keep positions in-bounds,
+                  // but if anything slips through we still render inside the grid.
+                  const cx = Math.max(0, Math.min(x, cols - 1));
+                  const cy = Math.max(0, Math.min(y, rows - 1));
+                  return (
+                    <div
+                      key={`${snake.id}_r${roundNum}_${i}`}
+                      className={`snake-segment${i === 0 ? " head" : ""}${!snake.alive ? " dead" : ""}`}
+                      style={{
+                        width: `${cellWidthPct}%`,
+                        height: `${cellHeightPct}%`,
+                        transform: `translate(${cx * 100}%, ${cy * 100}%)`,
+                        background: snake.color,
+                      }}
+                    />
+                  );
+                })
+              )}
+              {game?.food && (
+                <div
+                  key={`food_r${roundNum}_${game.food[0]}_${game.food[1]}`}
+                  className="food-segment"
+                  style={{
+                    width: `${cellWidthPct}%`,
+                    height: `${cellHeightPct}%`,
+                    transform: `translate(${game.food[0] * 100}%, ${game.food[1] * 100}%)`,
+                  }}
+                />
+              )}
+            </div>
           </div>
           {showSwipeHint && (
             <div className="swipe-hint" onAnimationEnd={() => setShowSwipeHint(false)}>
