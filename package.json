@@ -1,7 +1,7 @@
 {
   "name": "huddle-play-room",
   "private": true,
-  "version": "1.16.0",
+  "version": "1.16.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,9 @@
     "preview": "vite preview",
     "start": "vite build && node server/index.js",
     "test": "node test/smoke-test.js",
+    "test:unit": "node --test 'test/engines/**/*.test.js'",
+    "test:integration": "node --test 'test/integration/**/*.test.js'",
+    "test:all": "npm run test:unit && npm run test:integration && npm test",
     "verify-deploy": "node scripts/verify-deploy.js"
   },
   "dependencies": {

@@ -16,7 +16,7 @@
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
 import { join, dirname } from "path";
-import WebSocket from "ws";
+import { createClient } from "./helpers/ws-client.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SERVER_PATH = join(__dirname, "..", "server", "index.js");
@@ -45,66 +45,6 @@ function assert(condition, label) {
     console.log(`  ${colours.red("FAIL")} ${label}`);
     failed++;
   }
-}
-
-/**
- * Connect a WebSocket client and return a helper object with:
- *   - ws: the raw WebSocket
- *   - messages: array of all received messages (parsed JSON)
- *   - send(obj): send a JSON message
- *   - waitFor(type, timeout): wait for the next message of a given type
- *   - close(): close the connection
- */
-function createClient(name) {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(WS_URL);
-    const messages = [];
-    const waiters = [];
-
-    ws.on("open", () => {
-      resolve({
-        name,
-        ws,
-        messages,
-        id: null,
-        send(obj) {
-          ws.send(JSON.stringify(obj));
-        },
-        waitFor(type, timeoutMs = 5000) {
-          // Check if we already have a matching message
-          const existing = messages.find((m) => m.type === type);
-          if (existing) {
-            messages.splice(messages.indexOf(existing), 1);
-            return Promise.resolve(existing);
-          }
-          return new Promise((res, rej) => {
-            const timer = setTimeout(() => {
-              rej(new Error(`${name}: timed out waiting for "${type}" message`));
-            }, timeoutMs);
-            waiters.push({ type, resolve: res, timer });
-          });
-        },
-        close() {
-          ws.close();
-        },
-      });
-    });
-
-    ws.on("message", (raw) => {
-      const msg = JSON.parse(raw.toString());
-      // Check if any waiter wants this message type
-      const idx = waiters.findIndex((w) => w.type === msg.type);
-      if (idx !== -1) {
-        const waiter = waiters.splice(idx, 1)[0];
-        clearTimeout(waiter.timer);
-        waiter.resolve(msg);
-      } else {
-        messages.push(msg);
-      }
-    });
-
-    ws.on("error", reject);
-  });
 }
 
 /**
@@ -198,12 +138,12 @@ async function runTests() {
 
     console.log(colours.bold("Test: Client connections"));
 
-    const host = await createClient("host");
+    const host = await createClient(WS_URL, "host");
     const welcome1 = await host.waitFor("welcome");
     host.id = welcome1.id;
     assert(!!host.id, "Host receives a welcome message with an ID");
 
-    const player2 = await createClient("player2");
+    const player2 = await createClient(WS_URL, "player2");
     const welcome2 = await player2.waitFor("welcome");
     player2.id = welcome2.id;
     assert(!!player2.id, "Player 2 receives a welcome message with an ID");
@@ -307,7 +247,7 @@ async function runTests() {
     console.log(colours.bold("\nTest: Error handling"));
 
     // Try joining a non-existent room
-    const errorClient = await createClient("error-test");
+    const errorClient = await createClient(WS_URL, "error-test");
     await errorClient.waitFor("welcome");
     errorClient.send({ type: "join", code: "ZZZZ", name: "Ghost" });
     const errorMsg = await errorClient.waitFor("error");

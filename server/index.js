@@ -579,8 +579,9 @@ function handleSkipPhase(clientId) {
       break;
     case "wordchain":
       if (room.game.status === "round_end") {
+        // The win was already awarded when the round entered round_end (here or
+        // in the tick path); only fast-forward the pending auto-advance.
         stopLoop(room);
-        awardRoundWin(room, room.game.roundWinnerId);
         room.game = nextWordChainRound(room.game, Math.random);
         broadcastGameState(room);
         startWordChainTick(room);
@@ -591,7 +592,7 @@ function handleSkipPhase(clientId) {
           stopLoop(room);
           awardRoundWin(room, room.game.roundWinnerId);
           sendRoomUpdate(room);
-          setTimeout(() => {
+          room.pendingAdvance = setTimeout(() => {
             if (!room || room.status !== "playing") return;
             stopLoop(room);
             room.game = nextWordChainRound(room.game, Math.random);
@@ -630,15 +631,84 @@ function handleDisconnect(clientId) {
     room.hostId = room.players.keys().next().value;
   }
 
-  if (room.currentGame === "snake" && room.game?.snakes?.has(clientId)) {
-    const snake = room.game.snakes.get(clientId);
-    room.game.snakes.set(clientId, { ...snake, alive: false });
+  // Reconcile the active game's frozen roster with the player who just left,
+  // and advance the phase if their departure now completes it. Without this,
+  // every "everyone has voted/answered" check compares against a stale roster
+  // and the round stalls until its timer (or, for emoji guessing, forever).
+  if (room.status === "playing" && room.game) {
+    reconcileDisconnect(room, clientId);
   }
 
   sendRoomUpdate(room);
   if (room.status === "playing") {
     broadcastGameState(room);
   }
+}
+
+// Prune a departed player from the active engine's frozen roster and, if their
+// departure now completes the current phase, advance it immediately. One branch
+// per game; games not handled here fall back to their phase timer as before.
+function reconcileDisconnect(room, clientId) {
+  const game = room.game;
+  switch (room.currentGame) {
+    case "snake":
+      if (game.snakes?.has(clientId)) {
+        game.snakes.set(clientId, { ...game.snakes.get(clientId), alive: false });
+      }
+      break;
+
+    case "bomber":
+      // Mark the leaver dead so the running 100ms loop's checkRoundEnd resolves
+      // to the real last-man-standing instead of counting a phantom for 120s.
+      if (game.players?.has(clientId)) {
+        game.players.set(clientId, { ...game.players.get(clientId), alive: false });
+      }
+      break;
+
+    case "trivia":
+      pruneFromArray(game, "playerIds", clientId);
+      game.answers?.delete(clientId);
+      if (game.status === "question" && allAnswered(game)) {
+        handleTriviaReveal(room);
+      }
+      break;
+
+    case "hottake":
+      pruneFromArray(game, "playerIds", clientId);
+      game.votes?.delete(clientId);
+      if (game.status === "voting" && allHotTakeVotesIn(game)) {
+        triggerHotTakeReveal(room);
+      }
+      break;
+
+    case "truths":
+      pruneFromArray(game, "playerIds", clientId);
+      pruneFromArray(game, "turnQueue", clientId);
+      game.votes?.delete(clientId);
+      if (game.status === "voting" && allTruthsVotesIn(game)) {
+        triggerTruthsReveal(room);
+      }
+      break;
+
+    case "emoji":
+      pruneFromArray(game, "playerIds", clientId);
+      pruneFromArray(game, "correctGuessers", clientId);
+      pruneFromArray(game, "turnQueue", clientId);
+      game.guessAttempts?.delete(clientId);
+      // The guessing phase has no timer of its own, so a drop here must be
+      // resolved now: reveal if the storyteller left or no guesser remains.
+      if (game.status === "guessing") {
+        const guessers = game.playerIds.filter((id) => id !== game.storytellerId);
+        if (clientId === game.storytellerId || guessers.length === 0) {
+          triggerEmojiReveal(room);
+        }
+      }
+      break;
+  }
+}
+
+function pruneFromArray(obj, key, id) {
+  if (Array.isArray(obj[key])) obj[key] = obj[key].filter((x) => x !== id);
 }
 
 // ── Round & game win tracking ────────────────────────────────────
@@ -739,12 +809,10 @@ function handleGameAction(ws, clientId, action) {
         }
         break;
       case "emoji": {
-        const prevEmojiStatus = room.game.status;
         room.game = handleEmojiAction(room.game, clientId, action);
-        // Emojis submitted: composing → guessing — stop the compose timer
-        if (prevEmojiStatus === "composing" && room.game.status === "guessing") {
-          stopLoop(room);
-        }
+        // The phase timer keeps running into the guessing phase (see
+        // startEmojiComposeTimer) so the round self-resolves on timeout;
+        // early-reveal still fires when everyone has guessed or run out of tries.
         if (room.game.status === "guessing" && (allEmojiGuessersCorrect(room.game) || allEmojiGuessersExhausted(room.game))) {
           triggerEmojiReveal(room);
         } else {
@@ -831,6 +899,7 @@ function handleStopInput(clientId) {
 // ── Snake ────────────────────────────────────────────────────────
 
 function startSnake(room, players) {
+  stopLoop(room); // every other start* helper does this — without it a restart orphans the live 120ms loop
   room.game = createGameState({ rows: ROWS, cols: COLS, players, rng: Math.random });
   broadcastGameState(room);
 
@@ -918,14 +987,16 @@ function startEmojiGame(room, players) {
   startEmojiComposeTimer(room);
 }
 
-// 45-second countdown for the storyteller to pick their emojis.
-// If time runs out before submission, go straight to reveal so the round resolves gracefully.
+// Countdown that spans both the compose and guess phases. The storyteller has
+// COMPOSE_DURATION to pick emojis; submitting resets the clock to GUESS_DURATION.
+// Either phase running out of time goes straight to reveal so the round always
+// resolves — the guessing phase used to have no clock and could hang forever.
 function startEmojiComposeTimer(room) {
   stopLoop(room);
   room.interval = setInterval(() => {
     room.game = tickEmoji(room.game);
     broadcastGameState(room);
-    if (room.game.status === "composing" && room.game.timer <= 0) {
+    if ((room.game.status === "composing" || room.game.status === "guessing") && room.game.timer <= 0) {
       triggerEmojiReveal(room);
     }
   }, 1000);
@@ -1117,8 +1188,8 @@ function startBomberLoop(room) {
       room.game.roundWinnerIds.forEach((id) => awardRoundWin(room, id));
       sendRoomUpdate(room);
       broadcastGameState(room);
-      // Auto-advance after round end delay
-      setTimeout(() => {
+      // Auto-advance after round end delay (tracked so a host skip can cancel it)
+      room.pendingAdvance = setTimeout(() => {
         if (!room || room.status !== "playing") return;
         startNextBomberRound(room);
       }, room.game.timer * 1000);
@@ -1186,8 +1257,8 @@ function startWordChainTick(room) {
       if (room.game.status === "round_end") {
         awardRoundWin(room, room.game.roundWinnerId);
         sendRoomUpdate(room);
-        // Auto-advance after reveal delay
-        setTimeout(() => {
+        // Auto-advance after reveal delay (tracked so a host skip can cancel it)
+        room.pendingAdvance = setTimeout(() => {
           if (!room || room.status !== "playing") return;
           stopLoop(room);
           room.game = nextWordChainRound(room.game, Math.random);
@@ -1206,6 +1277,12 @@ function stopLoop(room) {
     clearInterval(room.interval);
     clearTimeout(room.interval);
     room.interval = null;
+  }
+  // Round-end auto-advance timers live here so a manual advance (host skip,
+  // disconnect) cancels the pending one instead of letting it double-fire.
+  if (room.pendingAdvance) {
+    clearTimeout(room.pendingAdvance);
+    room.pendingAdvance = null;
   }
 }
 

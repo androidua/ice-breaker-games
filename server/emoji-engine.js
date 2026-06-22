@@ -1,4 +1,5 @@
 const COMPOSE_DURATION = 45;
+const GUESS_DURATION = 45;
 const REVEAL_DURATION = 6;
 
 const PROMPTS_RAW = [
@@ -379,7 +380,9 @@ function submitEmojis(state, playerId, emojis) {
     emojis: cleaned,
     guesses: [],
     correctGuessers: [],
-    timer: null,
+    // Guessing gets its own countdown so the round always self-resolves even if
+    // a guesser idles or drops (it previously ran with no clock → permanent hang).
+    timer: GUESS_DURATION,
   };
 }
 
