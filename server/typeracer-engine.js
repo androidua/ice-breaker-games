@@ -1,5 +1,10 @@
 const RACE_DURATION = 90;
 const REVEAL_DURATION = 6;
+// Fastest plausible typing speed (chars/sec). A "finish" reached faster than
+// paragraph.length / MAX_CPS is treated as not-yet-finished, so a paste (which
+// arrives at t≈0) can't win — its only advantage was finishing instantly.
+// ~20 cps ≈ 240 WPM, comfortably above any real human typist.
+const MAX_CPS = 20;
 
 const PARAGRAPHS_RAW = [
   "The astronaut opened the fridge and found a raccoon eating last Tuesday's lasagna. Nobody was surprised. This was the third time this month.",
@@ -200,7 +205,13 @@ function updateProgress(state, playerId, typed) {
   if (current.finished) return state;
 
   const sanitised = String(typed).slice(0, state.paragraph.length + 10);
-  const finished = sanitised.length >= state.paragraph.length;
+  const reachedEnd = sanitised.length >= state.paragraph.length;
+  // Anti-cheat: only count as finished if enough wall-clock time has passed for
+  // a human to have typed it. A full-paragraph paste reaches length at t≈0 and
+  // is therefore rejected; keystrokes are still recorded for partial scoring.
+  const elapsedMs = Date.now() - state.raceStartTime;
+  const minFinishMs = (state.paragraph.length / MAX_CPS) * 1000;
+  const finished = reachedEnd && elapsedMs >= minFinishMs;
   const finishTime = finished ? Date.now() : null;
   const mistakes = finished
     ? countMistakes(sanitised.slice(0, state.paragraph.length), state.paragraph)

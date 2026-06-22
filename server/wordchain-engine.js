@@ -105,6 +105,10 @@ function advanceTurn(state) {
 
 // Called when timer runs out on the current player's turn
 export function eliminateCurrentPlayer(state) {
+  // Position of the eliminated player in the active list BEFORE removal.
+  const activeBefore = state.turnOrder.filter((id) => !state.eliminated.has(id));
+  const pos = activeBefore.indexOf(state.currentPlayerId);
+
   const eliminated = new Set(state.eliminated);
   eliminated.add(state.currentPlayerId);
   const lastEliminatedId = state.currentPlayerId;
@@ -126,12 +130,17 @@ export function eliminateCurrentPlayer(state) {
     };
   }
 
-  const nextPlayerId = active[state.currentIndex % active.length];
+  // Removing the current player shifts everyone after them down one slot, so the
+  // next player now sits at the eliminated player's old position (wrapping to 0
+  // if they were last). Derive from that position — never a stale currentIndex.
+  const nextIndex = pos % active.length;
+  const nextPlayerId = active[nextIndex];
   return {
     ...state,
     status: "playing",
     eliminated,
     lastEliminatedId,
+    currentIndex: nextIndex,
     currentPlayerId: nextPlayerId,
     timer: TURN_DURATION,
     invalidReason: null,

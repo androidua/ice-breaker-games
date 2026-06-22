@@ -14,6 +14,7 @@ import { createTyperacerState, handleTyperacerAction, allTyperacerFinished, reve
 import { createWordChainState, handleWordChainAction, eliminateCurrentPlayer, nextWordChainRound, tickWordChain, serializeWordChain } from "./wordchain-engine.js";
 import { createBomberState, handleBomberAction, applyImmediateMove, stepBomber, tickBomberTimer, nextBomberRound, serializeBomber, TICK_MS as BOMBER_TICK_MS } from "./bomber-engine.js";
 import { createHotTakeState, handleHotTakeAction, allHotTakeVotesIn, revealHotTake, nextHotTakeRound, tickHotTake, serializeHotTake } from "./hottake-engine.js";
+import { topWinners } from "./scoring.js";
 
 const PORT = Number(process.env.PORT || process.env.SNAKE_WS_PORT || 3000);
 const SNAKE_TICK_MS = 120;
@@ -525,18 +526,10 @@ function handleEndGame(clientId) {
   if (!room || room.hostId !== clientId) return;
   if (room.status !== "playing") return;
 
-  let maxWins = 0;
-  let gameWinnerId = null;
-  room.roundWins.forEach((wins, id) => {
-    if (wins > maxWins) {
-      maxWins = wins;
-      gameWinnerId = id;
-    }
+  // On a tie for the most round wins, every tied leader is a co-champion.
+  topWinners(room.roundWins).forEach((id) => {
+    room.gameWins.set(id, (room.gameWins.get(id) || 0) + 1);
   });
-
-  if (gameWinnerId && maxWins > 0) {
-    room.gameWins.set(gameWinnerId, (room.gameWins.get(gameWinnerId) || 0) + 1);
-  }
 
   room.roundWins = new Map();
   startVoting(room);
@@ -1101,8 +1094,9 @@ function handleTriviaTimerEnd(room) {
   } else if (room.game.status === "reveal") {
     room.game = nextTriviaQuestion(room.game);
     if (room.game.status === "round_complete") {
-      // Award win and stop — host must press "Start Next Set" to continue.
-      awardRoundWin(room, room.game.roundWinnerId);
+      // Award win(s) and stop — host must press "Start Next Set" to continue.
+      // A top-score tie credits every co-winner (rewards are shared).
+      (room.game.roundWinnerIds || []).forEach((id) => awardRoundWin(room, id));
       broadcastGameState(room);
     } else {
       broadcastGameState(room);

@@ -511,6 +511,7 @@ export function createTriviaState({ players, rng }) {
     triviaRound: 1,
     roundStartScores: new Map(scores),
     roundWinnerId: null,
+    roundWinnerIds: [],
   };
 }
 
@@ -554,22 +555,21 @@ export function revealTrivia(state) {
 export function nextTriviaQuestion(state) {
   const nextIndex = state.questionIndex + 1;
 
-  // All questions in this round answered — compute round winner
+  // All questions in this round answered — compute round winner(s).
+  // Rewards are shared: every player tied for the top positive gain co-wins.
   if (nextIndex >= state.questions.length) {
+    const gainOf = (id) => (state.scores.get(id) || 0) - (state.roundStartScores?.get(id) || 0);
     let maxGain = 0;
-    let winnerId = null;
-    state.scores.forEach((score, id) => {
-      const start = state.roundStartScores?.get(id) || 0;
-      const gain = score - start;
-      if (gain > maxGain) {
-        maxGain = gain;
-        winnerId = id;
-      }
-    });
+    state.scores.forEach((_, id) => { if (gainOf(id) > maxGain) maxGain = gainOf(id); });
+    const roundWinnerIds = [];
+    if (maxGain > 0) {
+      state.scores.forEach((_, id) => { if (gainOf(id) === maxGain) roundWinnerIds.push(id); });
+    }
     return {
       ...state,
       status: "round_complete",
-      roundWinnerId: winnerId,
+      roundWinnerIds,
+      roundWinnerId: roundWinnerIds[0] || null, // kept for the frontend's single-winner display
       timer: null,  // Host must press "Start Next Set" — no auto-advance
     };
   }
@@ -599,6 +599,7 @@ export function nextTriviaRound(state, rng) {
     triviaRound: (state.triviaRound || 1) + 1,
     roundStartScores: new Map(state.scores),
     roundWinnerId: null,
+    roundWinnerIds: [],
   };
 }
 
@@ -622,6 +623,7 @@ export function serializeTrivia(state) {
     playerCount: state.playerIds.length,
     triviaRound: state.triviaRound || 1,
     roundWinnerId: state.roundWinnerId,
+    roundWinnerIds: state.roundWinnerIds || [],
   };
 
   if (state.status === "reveal") {
