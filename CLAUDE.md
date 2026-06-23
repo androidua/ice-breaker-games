@@ -52,6 +52,7 @@ The footer in the live app displays the current version (e.g. `v1.9.0`). It is s
 Hosted on **Railway**, auto-deploying from GitHub on every push.
 
 - Start command (set in Railway dashboard, not in a config file): `node server/index.js`
+- **Region: Southeast Asia — Singapore (`asia-southeast1-eqsg3a`), single replica.** Most players are in Asia, so the server was moved here (from US East) on 2026-06-23 to cut WebSocket RTT — the main lever for real-time games like Snake. Region lives in Railway service settings (`multiRegionConfig`), not in a config file, like the start command. To change it: set `multiRegionConfig` via the Railway API/dashboard and redeploy (no downtime — no volume attached). Single-region only; multi-region replicas need the Pro plan.
 - Railway generates the public domain. The server serves both WebSocket and static files (dist/) from a single port.
 - Free tier may sleep after inactivity; first visitor wakes it in ~5 seconds.
 - No Dockerfile, Procfile, or railway.json exists. Railway detects the Node.js project automatically.
