@@ -147,6 +147,73 @@ export function eliminateCurrentPlayer(state) {
   };
 }
 
+// Called when a player leaves mid-game (disconnect). Unlike a timeout — which
+// always eliminates the CURRENT player — a disconnect can target any player, so
+// this generalises eliminateCurrentPlayer. The leaver is pruned from playerIds
+// (the persistent roster nextWordChainRound reshuffles) so a future round can't
+// resurrect them, added to `eliminated` (out of play this round), and the turn
+// pointer is kept valid. When only one active player is left the round ends with
+// them as the winner — same as a last-man-standing timeout.
+export function removeWordChainPlayer(state, playerId) {
+  if (!state.playerIds.includes(playerId)) return state;
+
+  const playerIds = state.playerIds.filter((id) => id !== playerId);
+
+  // Already out of play this round (e.g. timed out earlier): nothing to advance,
+  // just keep them out of the next round's roster.
+  if (state.eliminated.has(playerId)) {
+    return { ...state, playerIds };
+  }
+
+  const wasCurrent = state.currentPlayerId === playerId;
+  // Position of the leaver in the active list BEFORE removal — used to find the
+  // next player only when they were the current one (mirrors eliminateCurrentPlayer).
+  const activeBefore = state.turnOrder.filter((id) => !state.eliminated.has(id));
+  const pos = activeBefore.indexOf(playerId);
+
+  const eliminated = new Set(state.eliminated);
+  eliminated.add(playerId);
+  const active = state.turnOrder.filter((id) => !eliminated.has(id));
+
+  if (active.length <= 1) {
+    const winnerId = active.length === 1 ? active[0] : null;
+    const scores = new Map(state.scores);
+    if (winnerId) scores.set(winnerId, (scores.get(winnerId) || 0) + 3); // same bonus as a timeout win
+    return {
+      ...state,
+      status: "round_end",
+      playerIds,
+      eliminated,
+      lastEliminatedId: playerId,
+      roundWinnerId: winnerId,
+      scores,
+      timer: REVEAL_DURATION,
+    };
+  }
+
+  // Round continues. If the leaver was the active player, advance the turn to the
+  // player now sitting at their old position (wrapping to 0). Otherwise the turn
+  // is unchanged, but currentIndex must be re-derived since the active list shrank.
+  let currentPlayerId = state.currentPlayerId;
+  let timer = state.timer;
+  if (wasCurrent) {
+    currentPlayerId = active[pos % active.length];
+    timer = TURN_DURATION;
+  }
+
+  return {
+    ...state,
+    status: "playing",
+    playerIds,
+    eliminated,
+    lastEliminatedId: wasCurrent ? playerId : state.lastEliminatedId,
+    currentIndex: active.indexOf(currentPlayerId),
+    currentPlayerId,
+    timer,
+    invalidReason: null,
+  };
+}
+
 export function nextWordChainRound(state, rng) {
   const order = fisherYates(state.playerIds, rng);
   const scores = new Map(state.scores);

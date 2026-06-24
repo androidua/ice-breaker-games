@@ -11,7 +11,7 @@ import { createEmojiState, handleEmojiAction, allEmojiGuessersCorrect, allEmojiG
 import { createSketchState, handleSketchAction, tickSketch, revealSketch, nextSketchRound, serializeSketch } from "./sketch-engine.js";
 import { createTriviaState, handleTriviaAction, allAnswered, revealTrivia, nextTriviaQuestion, nextTriviaRound, tickTrivia, serializeTrivia } from "./trivia-engine.js";
 import { createTyperacerState, handleTyperacerAction, allTyperacerFinished, revealTyperacer, nextTyperacerRound, tickTyperacer, serializeTyperacer } from "./typeracer-engine.js";
-import { createWordChainState, handleWordChainAction, eliminateCurrentPlayer, nextWordChainRound, tickWordChain, serializeWordChain } from "./wordchain-engine.js";
+import { createWordChainState, handleWordChainAction, eliminateCurrentPlayer, removeWordChainPlayer, nextWordChainRound, tickWordChain, serializeWordChain } from "./wordchain-engine.js";
 import { createBomberState, handleBomberAction, applyImmediateMove, stepBomber, tickBomberTimer, nextBomberRound, serializeBomber, TICK_MS as BOMBER_TICK_MS } from "./bomber-engine.js";
 import { createHotTakeState, handleHotTakeAction, allHotTakeVotesIn, revealHotTake, nextHotTakeRound, tickHotTake, serializeHotTake } from "./hottake-engine.js";
 import { topWinners } from "./scoring.js";
@@ -694,6 +694,45 @@ function reconcileDisconnect(room, clientId) {
         const guessers = game.playerIds.filter((id) => id !== game.storytellerId);
         if (clientId === game.storytellerId || guessers.length === 0) {
           triggerEmojiReveal(room);
+        }
+      }
+      break;
+
+    case "sketch":
+      // Mirrors emoji: drawer ↔ storyteller, drawing ↔ guessing. The drawing
+      // phase has a 45s timer, so a drop won't hang forever — but if the drawer
+      // leaves (no one can draw) or the last guesser leaves (no one can win),
+      // the round would idle out the full timer. Reveal now instead.
+      pruneFromArray(game, "playerIds", clientId);
+      pruneFromArray(game, "turnQueue", clientId);
+      pruneFromArray(game, "correctGuessers", clientId);
+      if (game.status === "drawing") {
+        const guessers = game.playerIds.filter((id) => id !== game.drawerId);
+        if (clientId === game.drawerId || guessers.length === 0) {
+          triggerSketchReveal(room);
+        }
+      }
+      break;
+
+    case "wordchain":
+      if (game.status === "round_end") {
+        // Left during the reveal countdown — keep them out of the next round.
+        pruneFromArray(game, "playerIds", clientId);
+      } else if (game.status === "playing") {
+        // removeWordChainPlayer drops the leaver, advances the turn if it was
+        // theirs, and ends the round when one active player is left.
+        room.game = removeWordChainPlayer(game, clientId);
+        if (room.game.status === "round_end") {
+          stopLoop(room);
+          awardRoundWin(room, room.game.roundWinnerId);
+          sendRoomUpdate(room);
+          room.pendingAdvance = setTimeout(() => {
+            if (!room || room.status !== "playing") return;
+            stopLoop(room);
+            room.game = nextWordChainRound(room.game, Math.random);
+            broadcastGameState(room);
+            startWordChainTick(room);
+          }, room.game.timer * 1000);
         }
       }
       break;

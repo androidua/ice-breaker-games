@@ -8,7 +8,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { eliminateCurrentPlayer } from "../../server/wordchain-engine.js";
+import { eliminateCurrentPlayer, removeWordChainPlayer } from "../../server/wordchain-engine.js";
 
 function makeState(ids, currentIndex) {
   return {
@@ -48,4 +48,48 @@ test("a full timeout sweep visits players in correct forward order", () => {
   }
   assert.deepEqual(visited, ["e", "a", "b", "c"], "forward order with no skip or repeat");
   assert.equal(s.roundWinnerId, "d", "the last player standing wins the round");
+});
+
+// A1 · Word Chain disconnect reconciliation (deferred from Phase A). A player can
+// leave mid-game; unlike a timeout (always the current player), a disconnect can
+// target ANY player. removeWordChainPlayer generalises eliminateCurrentPlayer:
+// it drops the leaver, keeps the turn pointer valid, prunes them from the
+// persistent roster (so the next round can't resurrect them), and ends the round
+// when only one active player remains.
+
+test("removing the current player advances the turn to the next active player", () => {
+  let s = makeState(["a", "b", "c", "d"], 1); // current is 'b'
+  s = removeWordChainPlayer(s, "b");
+  assert.equal(s.status, "playing", "three players remain, the round continues");
+  assert.equal(s.currentPlayerId, "c", "the turn passes to the next active player");
+  assert.ok(s.eliminated.has("b"), "the leaver is out of play this round");
+  assert.deepEqual(s.playerIds, ["a", "c", "d"], "the leaver is pruned from the roster");
+});
+
+test("removing a non-current player keeps the current player's turn", () => {
+  let s = makeState(["a", "b", "c", "d"], 0); // current is 'a'
+  s = removeWordChainPlayer(s, "c"); // 'c' is not the current player
+  assert.equal(s.status, "playing");
+  assert.equal(s.currentPlayerId, "a", "the active player's turn is untouched");
+  assert.ok(s.eliminated.has("c"));
+  assert.deepEqual(s.playerIds, ["a", "b", "d"]);
+  assert.equal(s.currentIndex, 0, "currentIndex still points at the active player after the list shrank");
+});
+
+test("removing the current player when two remain ends the round, the survivor wins +3", () => {
+  let s = makeState(["a", "b"], 0); // current is 'a'
+  s = removeWordChainPlayer(s, "a");
+  assert.equal(s.status, "round_end");
+  assert.equal(s.roundWinnerId, "b", "the last player standing wins");
+  assert.equal(s.scores.get("b"), 3, "the winner gets the same +3 bonus as a timeout win");
+  assert.deepEqual(s.playerIds, ["b"], "the leaver is pruned from the roster");
+});
+
+test("removing an already-eliminated player only prunes the roster", () => {
+  let s = makeState(["a", "b", "c"], 0); // current is 'a'
+  s.eliminated = new Set(["c"]); // 'c' already timed out earlier this round
+  s = removeWordChainPlayer(s, "c");
+  assert.equal(s.status, "playing", "an already-out player leaving changes nothing in play");
+  assert.equal(s.currentPlayerId, "a");
+  assert.deepEqual(s.playerIds, ["a", "b"], "still pruned so the next round won't bring them back");
 });
