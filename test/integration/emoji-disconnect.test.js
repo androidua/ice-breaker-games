@@ -59,3 +59,31 @@ test("storyteller dropping during guessing reveals the round", async () => {
   assert.equal(st.state.status, "reveal");
   guesser.close();
 });
+
+// Deferred A1 follow-up: presenter/storyteller role reassignment on a mid-compose
+// drop. The composing phase runs a 45s timer, so a storyteller leaving before
+// submitting used to idle that full timer (then an empty reveal) with the gone
+// player still listed as storyteller. The fix advances to the next storyteller at
+// once — same as a host skip during composing.
+test("storyteller dropping during composing reassigns the role (no 45s stall)", async () => {
+  const host = await connect("host");
+  const p2 = await connect("p2");
+  await setupGameRoom([host, p2], "emoji");
+  const byId = { [host.id]: host, [p2.id]: p2 };
+
+  const compose = await host.waitForMatch("state", (m) => m.state.status === "composing");
+  const storyteller = byId[compose.state.storytellerId];
+  const survivor = [host, p2].find((c) => c.id !== compose.state.storytellerId);
+
+  storyteller.close();
+
+  // RED: storytellerId stays the departed player until the 45s timer; GREEN: the
+  // survivor is reassigned as storyteller and a fresh compose starts immediately.
+  const st = await survivor.waitForMatch(
+    "state",
+    (m) => m.state.status === "composing" && m.state.storytellerId === survivor.id,
+    3000
+  );
+  assert.equal(st.state.storytellerId, survivor.id);
+  survivor.close();
+});

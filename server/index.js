@@ -1,5 +1,5 @@
 import { createServer } from "http";
-import { readFile, existsSync } from "fs";
+import { readFile, readFileSync, existsSync } from "fs";
 import { join, extname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { gzip } from "zlib";
@@ -37,6 +37,11 @@ const COLORS = [
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const DIST_DIR = join(__dirname, "..", "dist");
 const HAS_DIST = existsSync(join(DIST_DIR, "index.html"));
+
+// Read once at startup for the /health diagnostic endpoint.
+const APP_VERSION = JSON.parse(
+  readFileSync(join(__dirname, "..", "package.json"), "utf8")
+).version;
 
 const MIME_TYPES = {
   ".html": "text/html", ".js": "application/javascript", ".css": "text/css",
@@ -253,6 +258,20 @@ const httpServer = createServer((req, res) => {
     return;
   }
   applySecurityHeaders(res);
+
+  // ── Health / region diagnostics ─────────────────────────────────
+  // Plain-curl proof of which build and Railway region is live. region is null
+  // off Railway (RAILWAY_REPLICA_REGION is injected only on the platform).
+  if (req.method === "GET" && (req.url === "/health" || req.url === "/api/health")) {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      ok: true,
+      version: APP_VERSION,
+      region: process.env.RAILWAY_REPLICA_REGION || null,
+      uptime: Math.floor(process.uptime()),
+    }));
+    return;
+  }
 
   // CORS preflight for /api/feedback (dev mode: frontend on :5173, server on :3000)
   if (req.method === "OPTIONS" && req.url === "/api/feedback") {
@@ -680,6 +699,13 @@ function reconcileDisconnect(room, clientId) {
       game.votes?.delete(clientId);
       if (game.status === "voting" && allTruthsVotesIn(game)) {
         triggerTruthsReveal(room);
+      } else if (game.status === "submitting" && clientId === game.presenterId) {
+        // The presenter left before submitting — reassign the presenter (next in
+        // queue) and start a fresh submit instead of idling the 60s timer.
+        stopLoop(room);
+        room.game = nextTruthsRound(room.game, Math.random);
+        broadcastGameState(room);
+        startTruthsTick(room);
       }
       break;
 
@@ -695,6 +721,13 @@ function reconcileDisconnect(room, clientId) {
         if (clientId === game.storytellerId || guessers.length === 0) {
           triggerEmojiReveal(room);
         }
+      } else if (game.status === "composing" && clientId === game.storytellerId) {
+        // The composer left before submitting — reassign the storyteller (next in
+        // queue) and start a fresh compose instead of idling the 45s timer.
+        stopLoop(room);
+        room.game = nextEmojiRound(room.game, Math.random);
+        broadcastGameState(room);
+        startEmojiComposeTimer(room);
       }
       break;
 
