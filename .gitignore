@@ -4,3 +4,16 @@ dist/
 .npm-cache/
 .cursor/
 .superpowers/
+
+# Agent / editor scratch (keep tracked skills under .claude/skills/)
+.claude/*
+!.claude/skills/
+.playwright-mcp/
+
+# Stray scratch files
+zeroc.txt
+plan-prompt.md
+\[1\] Feedback from users
+
+# Guard against re-adding a stale nested clone of this repo
+ice-breaker-games/

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1440">
+<title>Option 2 — Compact App Bar (Lobby)</title>
+<style>
+  :root { font-family: "Courier New", Courier, monospace; color: #141414; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at top, #f7f2e8, #eee6d7);
+  }
+  .root {
+    width: 960px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  /* ── OPTION 2: Compact left-anchored utility bar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #d4c9b6;
+  }
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .brand-name {
+    font-size: 13px;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    opacity: 0.75;
+  }
+  .topbar-right {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    opacity: 0.5;
+  }
+
+  /* ── Lobby ── */
+  .lobby { display: flex; justify-content: center; }
+  .panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 28px 32px;
+    border: 1px solid #c8bca7;
+    background: #fdfaf3;
+    width: 380px;
+  }
+  .panel-subtitle { font-size: 14px; padding-bottom: 4px; }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .field input {
+    font-family: inherit;
+    font-size: 16px;
+    padding: 8px 10px;
+    border: 1px solid #2a2a2a;
+    background: #f7f3ea;
+    color: #b0a898;
+    outline: none;
+  }
+  .actions { display: flex; gap: 8px; }
+  button {
+    font-family: inherit;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 12px;
+    padding: 8px 10px;
+    border: 1px solid #2a2a2a;
+    background: #f7f3ea;
+    color: #2a2a2a;
+    flex: 1;
+    opacity: 0.5;
+  }
+  .status { font-size: 14px; color: #888; }
+
+  /* ── Footer ── */
+  .footer {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    display: flex;
+    align-items: center;
+    padding-top: 4px;
+  }
+  .credit {
+    margin-left: auto;
+    font-size: 10px;
+    opacity: 0.5;
+    letter-spacing: 0.08em;
+  }
+  .credit a { color: inherit; text-decoration: underline; }
+
+  .mockup-label {
+    position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+    background: #2a2a2a; color: #f4f1ea; font-size: 11px; padding: 4px 12px;
+    letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.75;
+  }
+</style>
+</head>
+<body>
+<div class="root">
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <svg width="22" height="22" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+        <path d="M128 40 L204 84 L204 172 L128 216 L52 172 L52 84 Z" fill="none" stroke="#2a2a2a" stroke-width="12"/>
+        <path d="M128 40 L128 100 M128 100 L170 120 M128 100 L86 120 M128 150 L128 216 M128 150 L170 170 M128 150 L86 170" fill="none" stroke="#2a2a2a" stroke-width="9" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-name">Huddle Play Room</span>
+    </div>
+    <div class="topbar-right"><!-- empty on lobby --></div>
+  </header>
+
+  <main class="lobby">
+    <div class="panel">
+      <div class="panel-subtitle">Multiplayer party games for up to 8 players.</div>
+      <div class="field"><label>Name</label><input placeholder="Player" /></div>
+      <div class="field"><label>Room Code</label><input placeholder="AB12" /></div>
+      <div class="actions">
+        <button disabled>Host Room</button>
+        <button disabled>Join Room</button>
+      </div>
+      <div class="status">Connection: closed</div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <span>Huddle Play Room — Multiplayer Party Games</span>
+    <span class="credit">A personal project by <a href="#">Dmytro B.</a>, built with Claude AI &amp; Cursor</span>
+  </footer>
+
+</div>
+<div class="mockup-label">Option 2 — Compact App Bar · Lobby</div>
+</body>
+</html>

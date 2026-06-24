@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1440">
+<title>Option 3 — Minimal Strip (In-Game)</title>
+<style>
+  :root { font-family: "Courier New", Courier, monospace; color: #141414; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at top, #f7f2e8, #eee6d7);
+  }
+  .root {
+    width: 960px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ── OPTION 3: Minimal utility strip in-game — no logo, no brand name ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #d4c9b6;
+  }
+  .topbar-left {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    opacity: 0.4;
+  }
+  .topbar-right {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+
+  /* ── Voting ── */
+  .voting-stage { display: flex; flex-direction: column; gap: 16px; }
+  .voting-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  .voting-label { font-size: 14px; }
+  .voting-timer { font-size: 20px; font-weight: 700; }
+  .game-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+  .game-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 16px 12px;
+    border: 2px solid #b6a88f;
+    background: #fdfaf3;
+  }
+  .game-card-name { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .game-card-votes { font-size: 11px; opacity: 0.6; text-transform: uppercase; letter-spacing: 0.08em; }
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid #c8bca7;
+    background: #fdfaf3;
+  }
+  .leaderboard-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #e0d9cc;
+  }
+  .leaderboard-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 4px 0;
+  }
+  .player-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    background: #2a2a2a;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .games-won { font-size: 12px; opacity: 0.7; }
+  .star { color: #5a7d3a; font-weight: 700; }
+
+  /* ── Footer ── */
+  .footer {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    display: flex;
+    align-items: center;
+    padding-top: 4px;
+  }
+  .credit {
+    margin-left: auto;
+    font-size: 10px;
+    opacity: 0.5;
+    letter-spacing: 0.08em;
+  }
+  .credit a { color: inherit; text-decoration: underline; }
+
+  .mockup-label {
+    position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+    background: #2a2a2a; color: #f4f1ea; font-size: 11px; padding: 4px 12px;
+    letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.75;
+  }
+</style>
+</head>
+<body>
+<div class="root">
+
+  <!-- Minimal strip: only the essential utility info -->
+  <header class="topbar">
+    <div class="topbar-left">Huddle Play Room</div>
+    <div class="topbar-right">Room EGSE</div>
+  </header>
+
+  <main class="voting-stage">
+    <div class="voting-header">
+      <span class="voting-label">Vote for the next game!</span>
+      <span class="voting-timer">24s</span>
+    </div>
+    <div class="game-grid">
+      <div class="game-card"><div class="game-card-name">Snake Arena</div><div class="game-card-votes">0 Votes</div></div>
+      <div class="game-card"><div class="game-card-name">Two Truths &amp; A Lie</div><div class="game-card-votes">0 Votes</div></div>
+      <div class="game-card"><div class="game-card-name">Emoji Storytelling</div><div class="game-card-votes">0 Votes</div></div>
+      <div class="game-card"><div class="game-card-name">Sketch &amp; Guess</div><div class="game-card-votes">0 Votes</div></div>
+      <div class="game-card"><div class="game-card-name">Speed Trivia</div><div class="game-card-votes">0 Votes</div></div>
+    </div>
+    <div class="panel">
+      <div class="leaderboard-title">Overall Leaderboard — Games Won</div>
+      <div class="leaderboard-row">
+        <span><span class="player-swatch"></span>Player</span>
+        <span class="games-won">1 games won <span class="star">★</span></span>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <span>Huddle Play Room — Multiplayer Party Games</span>
+    <span class="credit">A personal project by <a href="#">Dmytro B.</a>, built with Claude AI &amp; Cursor</span>
+  </footer>
+
+</div>
+<div class="mockup-label">Option 3 — Landing Hero · In-Game (Minimal Strip)</div>
+</body>
+</html>

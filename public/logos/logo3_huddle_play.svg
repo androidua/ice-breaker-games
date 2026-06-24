@@ -1,0 +1,7 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <rect width="256" height="256" fill="#f4f1ea" />
+  <rect x="58" y="58" width="140" height="100" fill="#2a2a2a" rx="4" />
+  <path d="M118 158 L118 190 L150 158 Z" fill="#2a2a2a" />
+  <path d="M110 88 L150 108 L110 128 Z" fill="#f4f1ea" />
+  <text x="128" y="220" font-family="'Courier New', Courier, monospace" font-size="22" font-weight="bold" fill="#2a2a2a" text-anchor="middle">HUDDLE PLAY</text>
+</svg>
