@@ -86,11 +86,12 @@ export function createClient(wsUrl, name = "client") {
 /**
  * Spawn the real game server on `port` and resolve once it logs that it's
  * running. Returns { proc, stop } where stop() force-kills it and waits for exit.
+ * `extraEnv` lets a test override server config (e.g. { MAX_ROOMS: "1" }).
  */
-export function startServer(port) {
+export function startServer(port, extraEnv = {}) {
   return new Promise((resolve, reject) => {
     const proc = spawn("node", [SERVER_PATH], {
-      env: { ...process.env, PORT: String(port) },
+      env: { ...process.env, PORT: String(port), ...extraEnv },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let ready = false;

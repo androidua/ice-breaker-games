@@ -21,6 +21,9 @@ const SNAKE_TICK_MS = 120;
 const ROWS = 30;
 const COLS = 30;
 const MAX_PLAYERS = 8;
+// Global room cap so one client (or a botnet of sockets) can't grow the rooms
+// Map without bound. Env-overridable so tests can exercise the limit cheaply.
+const MAX_ROOMS = Number(process.env.MAX_ROOMS || 500);
 const COLORS = [
   "#2a2a2a", // dark charcoal
   "#3d5a80", // steel blue
@@ -73,6 +76,15 @@ function isFeedbackRateLimited(ip) {
   entry.count++;
   return entry.count > FEEDBACK_MAX;
 }
+
+// Expired entries are only overwritten when the same IP posts again, so
+// without a sweep the map grows by one entry per unique IP, forever.
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of feedbackLimits) {
+    if (now > entry.resetAt) feedbackLimits.delete(ip);
+  }
+}, FEEDBACK_WINDOW_MS);
 
 // Linear API config
 const LINEAR_API_KEY = process.env.LINEAR_API_KEY || "";
@@ -418,7 +430,15 @@ const wss = new WebSocketServer({
   },
   verifyClient: ({ origin }) => {
     if (!origin) return true; // server-to-server, health checks
-    return origin === `https://${CANONICAL_HOST}` || origin.includes("localhost");
+    if (origin === `https://${CANONICAL_HOST}`) return true;
+    // Parse and compare the hostname exactly — a substring check would let
+    // e.g. https://localhost.evil.com through.
+    try {
+      const { hostname } = new URL(origin);
+      return hostname === "localhost" || hostname === "127.0.0.1";
+    } catch {
+      return false; // malformed Origin header
+    }
   },
 });
 
@@ -484,6 +504,17 @@ function handleMessage(ws, clientId, message) {
 // ── Room lifecycle ───────────────────────────────────────────────
 
 function handleHost(ws, clientId, name = "Player") {
+  // One room per socket. Without this a single client can create unlimited
+  // rooms, and on disconnect only the first one found is cleaned — the rest
+  // hold a dead-socket player forever and leak.
+  if (findRoomByPlayer(clientId)) {
+    ws.send(JSON.stringify({ type: "error", message: "You are already in a room." }));
+    return;
+  }
+  if (rooms.size >= MAX_ROOMS) {
+    ws.send(JSON.stringify({ type: "error", message: "Server is at capacity right now — please try again in a few minutes." }));
+    return;
+  }
   const code = generateRoomCode();
   const player = { id: clientId, name: name.slice(0, 16), ws, color: COLORS[0] };
   const room = {
@@ -503,6 +534,10 @@ function handleHost(ws, clientId, name = "Player") {
 }
 
 function handleJoin(ws, clientId, code, name = "Player") {
+  if (findRoomByPlayer(clientId)) {
+    ws.send(JSON.stringify({ type: "error", message: "You are already in a room." }));
+    return;
+  }
   const room = rooms.get(String(code).toUpperCase());
   if (!room) {
     ws.send(JSON.stringify({ type: "error", message: "Room not found." }));

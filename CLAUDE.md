@@ -152,7 +152,8 @@ Current protections:
 - JSON parse wrapped in try-catch
 - Per-client WebSocket rate limit (60 msg/sec sliding window)
 - 16 KB max WebSocket payload
-- Origin verification on WebSocket handshake (rejects cross-site connections)
+- Origin verification on WebSocket handshake (exact hostname match — canonical domain, localhost, 127.0.0.1; rejects cross-site connections)
+- One room per socket (host/join rejected while already in a room) plus a global room cap (`MAX_ROOMS`, default 500, env-overridable)
 - `handleGameAction` switch wrapped in try/catch so an engine throw can't take down the whole server
 - `process.on('uncaughtException')` + `unhandledRejection` last-resort handlers
 - Full security headers on HTTP responses (CSP, HSTS, X-Frame-Options, Permissions-Policy, Referrer-Policy)
