@@ -19,8 +19,14 @@ npm start           # Build + serve in one command
 # Custom port
 PORT=8080 npm start
 
-# Run smoke tests
-npm test
+# Tests
+npm test                # smoke test only
+npm run test:unit       # engine unit tests (test/engines/)
+npm run test:integration # server integration tests (test/integration/)
+npm run test:all        # unit + integration + smoke (~30-45s)
+
+# Reinstall the pre-push git hook (e.g. on a fresh clone)
+npm run install-hooks
 ```
 
 In dev mode, the frontend on :5173 connects its WebSocket to :3000 automatically (detected by port in `App.jsx`). No Vite proxy is configured.
@@ -62,7 +68,7 @@ Hosted on **Railway**, auto-deploying from GitHub on every push.
 - **Frontend:** React 18, Vite 5, plain CSS (single file: `src/index.css`), native browser WebSocket
 - **Backend:** Node.js, `ws` library, `http` module for static file serving
 - **Hosting:** Railway (auto-deploy from GitHub)
-- **No database, no backend framework, no CSS preprocessor, no test runner**
+- **No database, no backend framework, no CSS preprocessor.** Tests use Node's built-in `node:test` runner — no test framework dependency.
 - Dependencies are intentionally minimal. Do not add libraries without discussing first.
 
 ## Architecture
@@ -175,15 +181,20 @@ The app is designed for phone use. Key patterns to maintain:
 
 ## Testing
 
-### Automated Smoke Tests
+### Automated Tests
 
-`test/smoke-test.js` starts the server on port 9876, connects two WebSocket clients, and runs through the core flow: host a room, join it, start voting, vote for a game, verify the game starts, test error handling, and test disconnect cleanup. Run with `npm test`.
+Three tiers, all on Node's built-in `node:test` runner (no framework dependency):
 
-A **pre-push git hook** (`.git/hooks/pre-push`) runs the smoke test automatically before every `git push`. If any test fails, the push is blocked. Bypass with `git push --no-verify` if needed.
+- `npm run test:unit` — pure engine unit tests in `test/engines/`
+- `npm run test:integration` — server integration tests in `test/integration/` (disconnect handling, phase advancement, health endpoint, etc.)
+- `npm test` — the smoke test: `test/smoke-test.js` starts the server on port 9876, connects two WebSocket clients, and runs through the core flow: host a room, join it, start voting, vote for a game, verify the game starts, test error handling, and test disconnect cleanup
+- `npm run test:all` — all of the above in sequence (~30–45s). This is what the pre-push hook and CI run.
+
+A **pre-push git hook** runs `npm run test:all` automatically before every `git push`. If any test fails, the push is blocked. Bypass with `git push --no-verify` if needed. The canonical copy of the hook is committed at `scripts/pre-push`; the live copy in `.git/hooks/` is not committed, so on a fresh clone restore it with `npm run install-hooks` (worktree-safe — installs into the common git dir).
+
+**CI:** `.github/workflows/test.yml` runs `npm ci && npm run test:all` on Node 22 for every push and pull request, so the suite guards production even if the local hook is bypassed or missing. Railway still auto-deploys on push to main regardless of CI results — CI is a tripwire, not a gate.
 
 After tests pass, if the push targets `refs/heads/main` the hook also background-spawns `scripts/verify-deploy.js`. That script polls Railway for the deployment of the pushed SHA, then curls `huddleplayroom.com` to confirm the new code is live. Results land in `/tmp/hpr-deploy-verify-<short-sha>.log` and a macOS notification fires when complete (~30–90s after push).
-
-Note: `.git/hooks/` is not committed to the repo. On a fresh clone, recreate `pre-push` manually — copy the working version from a teammate or from this repo's source-of-truth location.
 
 ### Manual deploy verification
 

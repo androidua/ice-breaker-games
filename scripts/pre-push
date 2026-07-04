@@ -1,0 +1,67 @@
+#!/bin/bash
+#
+# Pre-push hook: runs the full test suite (unit + integration + smoke)
+# before allowing a push. If any test fails, the push is blocked.
+# Bypass with: git push --no-verify
+#
+# Canonical copy lives at scripts/pre-push. Install into .git/hooks with:
+#   npm run install-hooks
+#
+# After tests pass, if pushing to main, spawns scripts/verify-deploy.js in
+# the background to poll Railway for build status and check the live URL.
+# A macOS notification fires when verification completes.
+#
+
+# Read stdin (git passes refs being pushed). Detect main-branch pushes.
+PUSHING_TO_MAIN=false
+PUSH_SHA=""
+while read local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    PUSHING_TO_MAIN=true
+    PUSH_SHA="$local_sha"
+  fi
+done
+
+echo ""
+echo "═══════════════════════════════════════════"
+echo "  Running pre-push test suite..."
+echo "═══════════════════════════════════════════"
+echo ""
+
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+
+(cd "$PROJECT_ROOT" && npm run test:all)
+TEST_EXIT=$?
+
+if [ $TEST_EXIT -ne 0 ]; then
+  echo ""
+  echo "══════════════════════════════════════════════"
+  echo "  PUSH BLOCKED: test suite failed."
+  echo "  Fix the issues above and try again."
+  echo "  To bypass: git push --no-verify"
+  echo "══════════════════════════════════════════════"
+  echo ""
+  exit 1
+fi
+
+echo ""
+echo "══════════════════════════════════════════════"
+echo "  All tests passed. Pushing..."
+echo "══════════════════════════════════════════════"
+echo ""
+
+if [ "$PUSHING_TO_MAIN" = true ] && [ -n "$PUSH_SHA" ]; then
+  SHORT_SHA="${PUSH_SHA:0:7}"
+  LOG_FILE="/tmp/hpr-deploy-verify-${SHORT_SHA}.log"
+  VERIFIER="$PROJECT_ROOT/scripts/verify-deploy.js"
+  if [ -f "$VERIFIER" ]; then
+    nohup node "$VERIFIER" "$PUSH_SHA" > "$LOG_FILE" 2>&1 &
+    disown
+    echo "  Railway deploy verification running in background (PID $!)."
+    echo "  Logs:  tail -f $LOG_FILE"
+    echo "  macOS notification will fire when complete (~30-90s)."
+    echo ""
+  fi
+fi
+
+exit 0
