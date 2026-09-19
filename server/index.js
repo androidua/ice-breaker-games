@@ -7,6 +7,7 @@ import { monitorEventLoopDelay } from "perf_hooks";
 import { WebSocketServer } from "ws";
 import { log, logLimited, errorFields } from "./log.js";
 import { parseDsn, inspectEnvelope, createDailyCap, createIpLimiter } from "./sentry-tunnel.js";
+import { initServerSentry, captureError } from "./sentry.js";
 import { createGameState, setSnakeDirection, stepGame } from "./engine.js";
 import { createVotingState, submitVote, tickVoting, allVotesIn, resolveVoting, serializeVoting } from "./voting-engine.js";
 import { createTruthsState, handleTruthsAction, allTruthsVotesIn, revealTruths, nextTruthsRound, tickTruths, serializeTruths } from "./truths-engine.js";
@@ -49,6 +50,17 @@ const HAS_DIST = existsSync(join(DIST_DIR, "index.html"));
 const APP_VERSION = JSON.parse(
   readFileSync(join(__dirname, "..", "package.json"), "utf8")
 ).version;
+
+// Errors-only server Sentry (Plan E2 part 2); off unless SENTRY_DSN is set.
+// Non-blocking: errors in the first moments before it loads are only logged.
+initServerSentry({
+  dsn: process.env.SENTRY_DSN,
+  release: `huddle-play-room@${APP_VERSION}`,
+  environment: process.env.RAILWAY_ENVIRONMENT_NAME || "development",
+  maxPerDay: Number(process.env.SENTRY_SERVER_DAILY_MAX || 50),
+})
+  .then((on) => { if (on) log("sentry_enabled", { release: `huddle-play-room@${APP_VERSION}` }); })
+  .catch((err) => logLimited("sentry_init_failed", errorFields(err), "error"));
 
 // ── Event-loop lag (for /health) ─────────────────────────────────
 // A stalled event loop is the server-side cause of tick jitter. Sampling runs on
@@ -265,7 +277,7 @@ function readJsonBody(req, maxBytes = 4 * 1024 * 1024) {
       size += chunk.length;
       if (size > maxBytes) {
         req.destroy();
-        reject(new Error("Body too large"));
+        reject(Object.assign(new Error("Body too large"), { status: 413 }));
       }
       chunks.push(chunk);
     });
@@ -273,7 +285,8 @@ function readJsonBody(req, maxBytes = 4 * 1024 * 1024) {
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString()));
       } catch {
-        reject(new Error("Invalid JSON"));
+        // A client error: a 400, never reported to Sentry as a server error.
+        reject(Object.assign(new Error("Invalid JSON"), { status: 400 }));
       }
     });
     req.on("error", reject);
@@ -545,7 +558,10 @@ const httpServer = createServer((req, res) => {
       .catch((err) => {
         const status = err.status || 500;
         const message = status < 500 ? err.message : "Something went wrong.";
-        if (status >= 500) logLimited("feedback_error", { status, ...errorFields(err) }, "error");
+        if (status >= 500) {
+          logLimited("feedback_error", { status, ...errorFields(err) }, "error");
+          captureError(err, { where: "feedback" });
+        }
         else if (status === 429) logLimited("feedback_capped", {}, "warn");
         res.writeHead(status, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: message }));
@@ -691,6 +707,7 @@ wss.on("connection", (ws) => {
         type: String(message.type).slice(0, 32),
         ...errorFields(err),
       }, "error");
+      captureError(err, { where: "message", type: String(message.type).slice(0, 32) });
       try {
         ws.send(JSON.stringify({ type: "error", message: "Action failed." }));
       } catch { /* socket already closed */ }
@@ -1264,6 +1281,7 @@ function handleGameAction(ws, clientId, action) {
       kind: typeof action.kind === "string" ? action.kind.slice(0, 32) : null,
       ...errorFields(err),
     }, "error");
+    captureError(err, { where: "game_action", game: room.currentGame });
     try {
       ws.send(JSON.stringify({ type: "error", message: "Action failed." }));
     } catch { /* socket already closed */ }
@@ -1819,7 +1837,9 @@ process.on("SIGINT", gracefulShutdown);
 // in principle, but in-memory state means a restart = total session loss.
 process.on("uncaughtException", (err) => {
   logLimited("uncaught_exception", errorFields(err), "error");
+  captureError(err, { where: "uncaught_exception" });
 });
 process.on("unhandledRejection", (reason) => {
   logLimited("unhandled_rejection", errorFields(reason), "error");
+  captureError(reason, { where: "unhandled_rejection" });
 });

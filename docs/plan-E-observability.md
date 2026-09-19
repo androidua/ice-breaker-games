@@ -1,6 +1,6 @@
 # Plan E — Logging & error monitoring (structured logs + Sentry)
 
-**Status:** E1 shipped in v1.17.1. E2 part 1 (browser Sentry + `/api/sentry` tunnel) shipped in v1.18.0 (both 2026-09-19). E2 part 2 (server SDK) and E3 (external uptime monitor) pending. Written 2026-09-19 alongside v1.17.0.
+**Status:** E1 shipped in v1.17.1. E2 part 1 (browser Sentry + `/api/sentry` tunnel) shipped in v1.18.0. E2 part 2 (server SDK) shipped in v1.19.0 (all 2026-09-19). E3 (external uptime monitor) pending: the org's only free Sentry uptime slot is Nux's. Written 2026-09-19 alongside v1.17.0.
 **Why:** today nobody finds out when something breaks. Server errors go to `console.error` in Railway logs that nobody watches; a React crash shows "Something went wrong" to the player and is never reported; there is no count of rooms/players, so there is no way to tell "is anyone playing right now?" before a deploy (every deploy wipes live rooms). The v1.17.0 review found a bug (malformed message → socket wedged → player kicked 30s later) that was *invisible* in production for exactly this reason.
 
 **Recommendation:** yes — but in two layers, cheapest first:
@@ -14,7 +14,7 @@
 
 Checked on 2026-09-19 (sentry.io/pricing, "Developer" plan): **1 user, unlimited projects, 5k errors/month, 5GB logs, 5M spans, 50 replays, 1 uptime monitor, 1 cron monitor, 30-day retention, email alerts only.**
 
-**Setup (done 2026-09-19):** HPR shares the existing Sentry org, slug `nux-kb` (region `https://us.sentry.io`), with the Nux bot. The user renamed the display name and kept the slug. Each app has its own projects: `huddle-play-room` (javascript-react) and `huddle-play-room-server` (node), both owned by team `huddle-play-room`. Nux stays in project `python` (display name "Nux"). **Quota is per organisation**, so HPR shares the 5k errors/month with Nux. **Per-key (DSN) rate limits need a Business/Enterprise plan**: on the free plan the API accepts the setting and silently drops it, which we verified. The user's budget of about 50 events/day per HPR project must therefore be enforced in our own code.
+**Setup (done 2026-09-19):** HPR shares one Sentry org with the Nux bot: slug `dmytro-projects`, display name "Dmytro's Project", region `https://us.sentry.io`. The user renamed it from `nux-kb` on 2026-09-19 so the two products read as separate. DSNs are unaffected because they use only numeric ids (verified). Each app has its own projects: `huddle-play-room` (javascript-react) and `huddle-play-room-server` (node), both owned by team `huddle-play-room`. Nux is project `nux` (renamed from `python`; its DSN and monitors are unaffected). **Quota is per organisation**, so HPR shares the 5k errors/month with Nux. **Per-key (DSN) rate limits need a Business/Enterprise plan**: on the free plan the API accepts the setting and silently drops it, which we verified. The user's budget of about 50 events/day per HPR project must therefore be enforced in our own code.
 
 ### Pros
 - **Frontend crashes become visible.** The React `ErrorBoundary` and uncaught browser errors (odd phones, old Safari) are currently silent. This is the biggest blind spot and the thing Sentry is best at.
@@ -27,7 +27,7 @@ Checked on 2026-09-19 (sentry.io/pricing, "Developer" plan): **1 user, unlimited
 ### Cons / risks
 - **New dependencies** (CLAUDE.md: minimal deps, discuss first). `@sentry/react` (browser) + `@sentry/node` (server). Current versions: 10.75.0.
 - **Bundle size:** the browser SDK adds tens of KB gzipped to today's 73.8 KB JS bundle. Measure; lazy-load Sentry after first paint if it adds more than ~25 KB.
-- **Shared 5k quota can be burned by one bug.** A bug firing inside a game loop (Snake ticks 8×/s) sends thousands of events in minutes and silences the `python` project for the rest of the month. **Must** add client-side throttling + dedupe (see E2) and check the project's spike protection / key rate limit settings.
+- **Shared 5k quota can be burned by one bug.** A bug firing inside a game loop (Snake ticks 8×/s) sends thousands of events in minutes and silences the Nux project (`nux`) for the rest of the month. **Must** add client-side throttling + dedupe (see E2) and check the project's spike protection / key rate limit settings.
 - **Ad blockers** block `*.ingest.sentry.io` for a share of browser users (errors from them are lost) — acceptable, or add a small `tunnel` endpoint later.
 - **CSP change:** `connect-src` must allow the Sentry ingest host.
 - **Privacy:** player names and IPs are personal data. Use `sendDefaultPii: false`, don't attach names/room codes as user info, and enable "Prevent storing of IP addresses" in the project settings.
@@ -90,6 +90,19 @@ Tests: extend `health-endpoint.test.js` (fields present and numeric; `rooms` goe
 - `captureException` in: the `handleMessage` catch, `handleGameAction` catch, `uncaughtException`, `unhandledRejection`, feedback 5xx path.
 - A simple per-process rate limiter around capture (e.g. max 30 events/hour, identical-message dedupe for 10 minutes) — a bug inside a timer must not burn the monthly quota.
 - Check the Railway start command (it currently isn't visible in the service config; CLAUDE.md says `node server/index.js`). Errors-only doesn't need `--import`.
+
+**As built, part 2 (v1.19.0):**
+- **SDK loading.** `server/sentry.js` dynamically imports `@sentry/node` 10.75 only when `SENTRY_DSN` is set.
+- **Configuration.** `defaultIntegrations: false` (only `linkedErrorsIntegration` + `contextLinesIntegration`), `skipOpenTelemetrySetup`, `registerEsmLoaderHooks: false`, `sendDefaultPii: false`, `sendClientReports: false`, `serverName` pinned (the default is `os.hostname()`), release `huddle-play-room@<version>`, environment `RAILWAY_ENVIRONMENT_NAME`.
+- **Capture sites.** Captures come only from `captureError()` at: message catch, game-action catch, uncaught exception, unhandled rejection, feedback 5xx. `createErrorGate` allows each distinct error once per 10 minutes and at most 50 per 24h.
+- **Bug found and fixed.** Invalid JSON to `/api/feedback` used to be a 500, which would have been a free way to spend the error budget. It's now a 400, and oversized bodies are a 413.
+- **Latency guard (§6), local, 2026-09-19.** Client-observed frame tails were too noisy to decide anything (the Mac was using 6 GB of swap), so the Snake tick was measured *inside the server*, wrapping the 120 ms interval. Two pairs after a 20 s warm-up, v1.18.1 against the SDK loaded:
+  - tick mean 121.47/121.48 vs 121.45/121.46 ms;
+  - p99 122.96/123.07 vs 122.90/122.90 ms;
+  - max 149.06/128.92 vs 125.25/123.07 ms;
+  - ticks over 130 ms: 1 vs 0.
+  - Mechanism checks: the initialised SDK adds no event-loop handles (identical `getActiveResourcesInfo()`). GC counts during play depend on where the window falls relative to startup allocation, not on the SDK (after warm-up: 7 GCs without, 3 with). The cost is RSS +~20 MB (heap +~10 MB).
+- **Real ingest check.** Run locally with the real DSN, this created HUDDLE-PLAY-ROOM-SERVER-1 with release, `where` tag, linked cause and source context, and no name, email or client IP.
 
 **Sentry project settings:** "Prevent storing of IP addresses" on; data scrubbing defaults on; alert rule: email on new issue + on a regression; check spike protection and set a client key rate limit if the plan offers it.
 

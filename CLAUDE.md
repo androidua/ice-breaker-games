@@ -58,7 +58,7 @@ The footer in the live app displays the current version (e.g. `v1.9.0`). It is s
 Hosted on **Railway**, auto-deploying from GitHub on every push.
 
 - Builder: Railpack, with no custom start command, so Railway runs `npm start` = `vite build && node server/index.js` and rebuilds the bundle on every container start. Checked 2026-09-19 via the service config and deploy logs. `VITE_*` Railway variables are therefore present when the bundle is built.
-- Railway variables: `LINEAR_API_KEY` (feedback), `VITE_SENTRY_DSN` (browser Sentry DSN, read by Vite at build time and by the `/api/sentry` tunnel at runtime).
+- Railway variables: `LINEAR_API_KEY` (feedback), `VITE_SENTRY_DSN` (browser Sentry DSN, read by Vite at build time and by the `/api/sentry` tunnel at runtime), `SENTRY_DSN` (server Sentry DSN, project `huddle-play-room-server`). Optional overrides: `SENTRY_TUNNEL_DAILY_MAX`, `SENTRY_SERVER_DAILY_MAX` (both default 50).
 - **Region: Southeast Asia — Singapore (`asia-southeast1-eqsg3a`), single replica.** Most players are in Asia, so the server was moved here (from US East) on 2026-06-23 to cut WebSocket RTT — the main lever for real-time games like Snake. Region lives in Railway service settings (`multiRegionConfig`), not in a config file, like the start command. To change it: set `multiRegionConfig` via the Railway API/dashboard and redeploy (no downtime — no volume attached). Single-region only; multi-region replicas need the Pro plan.
 - Railway generates the public domain. The server serves both WebSocket and static files (dist/) from a single port.
 - **Wait for CI is on** (deploy trigger `checkSuites: true`, set 2026-09-19): Railway only deploys a push after the GitHub Actions test workflow passes. **Healthcheck:** `healthcheckPath: /health` (timeout 120s) — a new deploy must answer 200 there before it replaces the old one. `/health` is handled *before* the canonical-host redirect because Railway's probe uses its own Host header; keep it that way or deploys will fail.
@@ -70,7 +70,7 @@ Hosted on **Railway**, auto-deploying from GitHub on every push.
 ## Tech Stack
 
 - **Frontend:** React 18, Vite 6, plain CSS (single file: `src/index.css`), native browser WebSocket, `@sentry/react` (errors only, lazy-loaded)
-- **Backend:** Node.js, `ws` library, `http` module for static file serving
+- **Backend:** Node.js, `ws` library, `http` module for static file serving, `@sentry/node` (errors only, imported only when `SENTRY_DSN` is set)
 - **Hosting:** Railway (auto-deploy from GitHub)
 - **No database, no backend framework, no CSS preprocessor.** Tests use Node's built-in `node:test` runner — no test framework dependency.
 - Dependencies are intentionally minimal. Do not add libraries without discussing first.
@@ -95,6 +95,8 @@ Each game has a **pure engine module** (no side effects, no timers, no WebSocket
 | `wordchain-engine.js` | Word Chain | `createWordChainState()`, `handleWordChainAction()`, `tickWordChain()` |
 | `hottake-engine.js` | Hot Take Voting | `createHotTakeState()`, `handleHotTakeAction()`, `tickHotTake()` |
 | `voting-engine.js` | Game voting phase | `createVotingState()`, `submitVote()`, `resolveVoting()` |
+
+`sentry.js` is errors-only server Sentry (Plan E2 part 2). It has no automatic instrumentation (`defaultIntegrations: false`, `skipOpenTelemetrySetup`, `registerEsmLoaderHooks: false`) and no Sentry process handlers; ours keep the process alive. Events are sent only through `captureError(err, tags)` in the existing error paths: message and game-action catches, uncaught exceptions and unhandled rejections, feedback 5xx. `createErrorGate` allows each distinct error once per 10 minutes and at most 50 per 24h. Client mistakes must stay 4xx (e.g. invalid JSON to `/api/feedback` is a 400) so they never reach Sentry. `serverName` is pinned so a laptop hostname is never sent. Verified: Snake tick timing is unchanged with the SDK loaded, and it adds no event-loop handles; RSS grows by about 20 MB.
 
 `log.js` is structured logging: `log(event, fields, level)` writes one JSON line to stdout in Railway's schema (`message` = event name, `level`, every other field a filterable `@attribute`). `createLimitedLog()` caps an event per minute. Use it for error and abuse events a client or a bug can fire in a loop, so a flood can't push Railway past its 500 lines/s cap. Lifecycle events: `server_started`, `server_shutdown`, `room_created`, `room_closed`, `player_joined`, `player_left` (with WebSocket close code: 1000/1001 normal, 1006 dropped), `game_started`, `game_ended`, `heartbeat_terminate`. Errors: `message_error`, `game_action_error`, `uncaught_exception`, `unhandled_rejection`, `feedback_error`. **Never log inside a game tick loop, and never log player names or IPs** (room codes and player ids only). `test/integration/lifecycle-logs.test.js` enforces both.
 
@@ -176,7 +178,7 @@ Current protections:
 
 Known gaps to be aware of:
 - **No session resume.** If a player's WebSocket drops while in a room they lose their seat; the client shows a "Rejoin" banner (reload → lobby prefilled with room code + name) and they can re-enter at the next game vote as a new player. On the start screen (not in a room) the client auto-reconnects with backoff. Plan: `docs/plan-D-reconnect-resume.md`.
-- **Server errors are not in Sentry yet.** Browser errors go to Sentry project `huddle-play-room` (org `nux-kb`, shared with Nux). Server errors are only structured JSON lines in Railway logs (filter `@level:error`) until the server SDK ships (Plan E2 part 2: `docs/plan-E-observability.md`).
+- **Sentry alerts depend on UI settings.** Browser errors go to project `huddle-play-room` and server errors to `huddle-play-room-server` (org `dmytro-projects`, shared with project `nux`). Email alerts and "Prevent storing IP addresses" are per-project UI settings the MCP can't set or read. No uptime monitor: the org's only free slot belongs to Nux.
 - **No input sanitisation beyond length clamping.** Player names and text inputs are JSON-serialised (not rendered as raw HTML), so XSS risk is low. Any future feature rendering user text as HTML must sanitise it.
 - **In-memory state means zero persistence.** Server restart (including Railway redeploys) loses all rooms and scores.
 
@@ -207,7 +209,7 @@ Three tiers, all on Node's built-in `node:test` runner (no framework dependency)
 
 A **pre-push git hook** runs `npm run test:all` automatically before every `git push`. If any test fails, the push is blocked. Bypass with `git push --no-verify` if needed. The canonical copy of the hook is committed at `scripts/pre-push`; the live copy in `.git/hooks/` is not committed, so on a fresh clone restore it with `npm run install-hooks` (worktree-safe — installs into the common git dir).
 
-**CI:** `.github/workflows/test.yml` runs `npm ci && npm run test:all` on Node 22 for every push and pull request, so the suite guards production even if the local hook is bypassed or missing. Since 2026-09-19 Railway waits for CI (`checkSuites: true`), so **a red CI run blocks the deploy** — CI is now a gate. Tests must not depend on `npm run build` (CI doesn't build); `static-http.test.js` serves a temp `DIST_DIR` fixture instead. Integration test ports must stay unique across files (node:test runs files in parallel); used so far: 9882–9905.
+**CI:** `.github/workflows/test.yml` runs `npm ci && npm run test:all` on Node 22 for every push and pull request, so the suite guards production even if the local hook is bypassed or missing. Since 2026-09-19 Railway waits for CI (`checkSuites: true`), so **a red CI run blocks the deploy** — CI is now a gate. Tests must not depend on `npm run build` (CI doesn't build); `static-http.test.js` serves a temp `DIST_DIR` fixture instead. Integration test ports must stay unique across files (node:test runs files in parallel); used so far: 9882–9907.
 
 After tests pass, if the push targets `refs/heads/main` the hook also background-spawns `scripts/verify-deploy.js`. That script polls Railway for the deployment of the pushed SHA, then curls `huddleplayroom.com` to confirm the new code is live. Results land in `/tmp/hpr-deploy-verify-<short-sha>.log` and a macOS notification fires when complete (~30–90s after push).
 
