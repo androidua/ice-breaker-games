@@ -211,12 +211,20 @@ function handleSentryTunnel(req, res) {
         return reply(429, { "Retry-After": String(sentryDailyCap.retryAfterSec()) });
       }
       const { protocol, host, projectId } = sentryTarget;
-      const upstream = await fetch(`${protocol}//${host}/api/${projectId}/envelope/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-sentry-envelope" },
-        body,
-        signal: AbortSignal.timeout(5000),
-      });
+      const started = Date.now();
+      let upstream;
+      try {
+        upstream = await fetch(`${protocol}//${host}/api/${projectId}/envelope/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-sentry-envelope" },
+          body,
+          signal: AbortSignal.timeout(5000),
+        });
+      } catch (err) {
+        // ms tells a fast refusal/unreachable apart from a timeout.
+        logLimited("sentry_tunnel_error", { ms: Date.now() - started, ...errorFields(err) }, "error");
+        return reply(502);
+      }
       log("sentry_event_forwarded", { status: upstream.status }); // bounded by the daily cap
       const retryAfter = upstream.headers.get("retry-after");
       reply(upstream.status, retryAfter ? { "Retry-After": retryAfter } : {});

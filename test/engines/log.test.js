@@ -77,3 +77,26 @@ test("createLimitedLog caps each event per window and reports the suppressed cou
   limited("feedback_spam", {});
   assert.equal(emitted.at(-1).fields.suppressed, undefined, "the count is reported once");
 });
+
+// Node's fetch reports every network failure as "TypeError: fetch failed"; the
+// reason (DNS, refused, unreachable, per-address happy-eyeballs attempts) is
+// only on err.cause. Without it a production failure can't be diagnosed.
+test("errorFields includes the cause chain, including per-address connect errors", () => {
+  const unreachable = Object.assign(new Error("connect ENETUNREACH 2600:1901::1:443"), {
+    code: "ENETUNREACH", address: "2600:1901::1", port: 443,
+  });
+  const single = errorFields(new TypeError("fetch failed", { cause: unreachable }));
+  assert.equal(single.err, "fetch failed");
+  assert.match(single.cause, /ENETUNREACH/);
+
+  const refused = Object.assign(new Error("connect ECONNREFUSED 34.160.81.0:443"), {
+    code: "ECONNREFUSED", address: "34.160.81.0", port: 443,
+  });
+  const aggregate = Object.assign(new AggregateError([unreachable, refused], "all attempts failed"), { code: "ETIMEDOUT" });
+  const multi = errorFields(new TypeError("fetch failed", { cause: aggregate }));
+  assert.match(multi.cause, /ETIMEDOUT/);
+  assert.match(multi.cause, /ENETUNREACH 2600:1901::1:443/);
+  assert.match(multi.cause, /ECONNREFUSED 34\.160\.81\.0:443/);
+
+  assert.equal(errorFields(new Error("plain")).cause, undefined, "no cause field when there is none");
+});

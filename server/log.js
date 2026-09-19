@@ -56,9 +56,27 @@ export const logLimited = createLimitedLog();
 // Called from the last-resort process handlers, so it must never throw itself.
 export function errorFields(err) {
   if (err instanceof Error) {
-    return { err: safeString(err.message).slice(0, 500), stack: safeString(err.stack).slice(0, 2000) };
+    const fields = { err: safeString(err.message).slice(0, 500), stack: safeString(err.stack).slice(0, 2000) };
+    // fetch() reports every network failure as "fetch failed"; the real reason
+    // (DNS, refused, unreachable) is only on err.cause.
+    if (err.cause !== undefined) fields.cause = describeCause(err.cause).slice(0, 1000);
+    return fields;
   }
   return { err: safeString(err).slice(0, 500) };
+}
+
+// "ETIMEDOUT all attempts failed [ENETUNREACH 2600::1:443; ECONNREFUSED 1.2.3.4:443]"
+function describeCause(cause) {
+  if (!(cause instanceof Error)) return safeString(cause);
+  const code = cause.code ? `${cause.code} ` : "";
+  if (Array.isArray(cause.errors) && cause.errors.length > 0) {
+    const attempts = cause.errors.map((e) => {
+      const where = e?.address ? ` ${e.address}${e.port ? `:${e.port}` : ""}` : "";
+      return `${e?.code ?? "?"}${where}`;
+    });
+    return `${code}${safeString(cause.message)} [${attempts.join("; ")}]`;
+  }
+  return `${code}${safeString(cause.message)}`;
 }
 
 // String() throws on e.g. a null-prototype object used as a rejection reason.
