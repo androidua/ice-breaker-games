@@ -51,6 +51,14 @@ export function createLimitedLog(emit = log, { max = 10, windowMs = 60 * 1000, n
 
 export const logLimited = createLimitedLog();
 
+// Lifecycle events (rooms, players, games, resumes) are normally rare, but a
+// client can drive several of them in a loop — a fresh socket may resume the
+// same seat, and host/drop recreates rooms — and 1200+ lines/s would push
+// Railway past its 500 lines/s cap, dropping the lines that matter. The
+// ceiling is high enough that a real party never reaches it: 120 per event per
+// minute is 8 players joining every 4 seconds, all minute.
+export const logLifecycle = createLimitedLog(log, { max: 120, windowMs: 60 * 1000 });
+
 // Error details for error-level events. The stack is what makes a production
 // error fixable; cap it so one line stays well inside Railway's limits.
 // Called from the last-resort process handlers, so it must never throw itself.

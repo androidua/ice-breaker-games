@@ -18,7 +18,7 @@ const WS = `ws://localhost:${PORT}`;
 const GRACE_MS = 600;
 let server;
 
-before(async () => { server = await startServer(PORT, { RESUME_GRACE_MS: String(GRACE_MS) }); });
+before(async () => { server = await startServer(PORT, { RESUME_GRACE_MS: String(GRACE_MS), DEBUG_INTERNALS: "1" }); });
 after(async () => { await server.stop(); });
 
 // Close every socket a test opened, even when it fails part-way, so a failed
@@ -87,6 +87,12 @@ async function health() {
   return (await fetch(`http://localhost:${PORT}/health`)).json();
 }
 
+// Server-side bookkeeping that no client message reveals: the maps a seat lives
+// in, the grace timers, and the live game loops. DEBUG_INTERNALS=1 exposes it.
+async function internals() {
+  return (await fetch(`http://localhost:${PORT}/__internals`)).json();
+}
+
 async function until(check, timeoutMs = 3000, what = "condition") {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -137,31 +143,51 @@ test("2. resume after grace fails, and the room no longer lists the player", asy
   host.close(); back.close();
 });
 
-test("3. host resumes as host, with no host reassignment in between", async () => {
+test("3. the host role is lent out while the host is away, and handed back on resume", async () => {
   const host = await connect("host");
   const guest = await connect("guest");
   await hostAndJoin(host, guest);
-  const hostIds = [];
-  guest.ws.on("message", (raw) => {
-    const m = JSON.parse(raw.toString());
-    if (m.type === "room") hostIds.push(m.room.hostId);
-  });
 
   forget(guest);
   drop(host);
-  await sleep(100);
+  // Nothing the host alone can do (Start here, Skip or End Game mid-game, or
+  // Trivia's "next set") may wait out the grace, so a connected player holds
+  // the role meanwhile.
+  const lent = await guest.waitForMatch("room", (m) => away(m.room, host.id));
+  assert.equal(lent.room.hostId, guest.id, "the host role was not lent to the connected player");
+  guest.send({ type: "start" });
+  await guest.waitForMatch("room", (m) => m.room.status === "voting");
+
   const back = await resumeAs(host);
   assert.equal((await resumed(back)).id, host.id);
-  assert.equal((await back.waitFor("room")).room.hostId, host.id);
-  await guest.waitForMatch("room", (m) => !away(m.room, host.id));
+  const returned = await back.waitForMatch("room", (m) => m.room.hostId === host.id, 3000);
+  assert.equal(returned.room.status, "voting");
+  await guest.waitForMatch("room", (m) => m.room.hostId === host.id);
 
-  assert.ok(hostIds.length > 0, "guest saw no room updates");
-  assert.deepEqual([...new Set(hostIds)], [host.id], "hostId changed while the host was away");
-
-  // Host-only actions route to the resumed seat.
-  back.send({ type: "start" });
-  await guest.waitForMatch("room", (m) => m.room.status === "voting");
+  // Host-only actions route to the resumed seat, not the stand-in.
+  back.send({ type: "vote", game: "hottake" });
+  guest.send({ type: "vote", game: "hottake" });
+  await back.waitForMatch("room", (m) => m.room.status === "playing");
+  guest.send({ type: "endGame" }); // no longer the host: ignored
+  await sleep(200);
+  back.send({ type: "endGame" });
+  await back.waitForMatch("room", (m) => m.room.status === "voting", 3000);
   back.close(); guest.close();
+});
+
+test("3b. a lent host role stays put when the away host never comes back", async () => {
+  const host = await connect("host");
+  const guest = await connect("guest");
+  await hostAndJoin(host, guest);
+
+  forget(guest);
+  drop(host);
+  await guest.waitForMatch("room", (m) => m.room.hostId === guest.id);
+  const gone = await guest.waitForMatch("room", (m) => !m.room.players.some((p) => p.id === host.id), GRACE_MS + 2000);
+  assert.equal(gone.room.hostId, guest.id);
+  guest.send({ type: "start" });
+  await guest.waitForMatch("room", (m) => m.room.status === "voting");
+  guest.close();
 });
 
 test("4. round wins survive a drop and resume", async () => {
@@ -343,21 +369,25 @@ test("11. Sketch: the drawer resumes mid-drawing as the drawer, word and strokes
   const guesser = drawer === host ? guest : host;
   const word = (await drawer.waitForMatch("state", (m) => typeof m.state.word === "string")).state.word;
 
-  drawer.send({ type: "gameAction", action: { kind: "draw", points: [[1, 1], [5, 5]], color: "#2a2a2a" } });
-  await guesser.waitForMatch("state", (m) => m.state.strokes.length === 1);
+  drawer.send({ type: "gameAction", action: { kind: "draw", points: [{ x: 1, y: 1 }, { x: 5, y: 5 }], color: "#2a2a2a" } });
+  await guesser.waitFor("sketch_stroke");
   drop(drawer);
   await sleep(100);
   const back = await resumeAs(drawer);
   await resumed(back);
 
-  const mine = await back.waitForMatch("state", (m) => m.state.status === "drawing");
+  // A resume has to rebuild the canvas, so that state carries the strokes.
+  const mine = await back.waitForMatch("state", (m) => m.state.status === "drawing" && m.state.strokes !== undefined);
   assert.equal(mine.state.drawerId, drawer.id);
   assert.equal(mine.state.word, word, "the drawer lost the secret word");
   assert.equal(mine.state.strokes.length, 1);
+  assert.deepEqual(mine.state.strokes[0].points, [{ x: 1, y: 1 }, { x: 5, y: 5 }]);
   forget(guesser);
-  back.send({ type: "gameAction", action: { kind: "draw", points: [[5, 5], [9, 9]], color: "#2a2a2a" } });
-  const theirs = await guesser.waitForMatch("state", (m) => m.state.strokes.length === 2);
-  assert.equal(theirs.state.word, undefined, "a guesser can see the secret word");
+  back.send({ type: "gameAction", action: { kind: "draw", points: [{ x: 5, y: 5 }, { x: 9, y: 9 }], color: "#2a2a2a" } });
+  const theirs = await guesser.waitFor("sketch_stroke");
+  assert.deepEqual(theirs.stroke.points, [{ x: 5, y: 5 }, { x: 9, y: 9 }]);
+  const guesserState = await guesser.waitForMatch("state", (m) => m.state.status === "drawing");
+  assert.equal(guesserState.state.word, undefined, "a guesser can see the secret word");
 });
 
 test("12. Sketch: a drawer who never returns keeps the turn through grace, then the round reveals", async () => {
@@ -462,4 +492,88 @@ test("15. Game vote: an away player's vote still counts, and they resume into th
   host.send({ type: "gameAction", action: { kind: "hotTakeVote", vote: "disagree" } });
   back.send({ type: "gameAction", action: { kind: "hotTakeVote", vote: "agree" } });
   await host.waitForMatch("state", (m) => m.state.status === "reveal", 3000);
+});
+
+// ── invariants that no happy-path assertion covers ────────────────────────
+
+test("16. a resumed seat outlives the deadline its drop had set", async () => {
+  // graceTimers counts every room, so start from a quiet server.
+  await until(async () => (await health()).rooms === 0, 6000, "earlier rooms to expire");
+  const host = await connect("host");
+  const guest = await connect("guest");
+  await hostAndJoin(host, guest);
+
+  drop(guest);
+  await host.waitForMatch("room", (m) => away(m.room, guest.id));
+  const back = await resumeAs(guest);
+  await resumed(back);
+  await back.waitFor("room");
+
+  // The timer the drop armed must have been cancelled, not just outrun: wait
+  // past when it would have fired and check the seat is still there.
+  const state = await internals();
+  assert.equal(state.graceTimers, 0, "the resumed seat still has a grace timer armed");
+  await sleep(GRACE_MS + 400);
+  assert.equal((await health()).players, 2, "the resumed player was dropped by the old timer");
+  const left = logEvents().filter((e) => e.message === "player_left" && e.player === guest.id);
+  assert.deepEqual(left, [], "the resumed player was released anyway");
+
+  // ...and it is still a live seat, not just a row in the room list.
+  host.send({ type: "start" });
+  await back.waitForMatch("room", (m) => m.room.status === "voting", 3000);
+  host.send({ type: "vote", game: "hottake" });
+  back.send({ type: "vote", game: "hottake" });
+  await back.waitForMatch("room", (m) => m.room.status === "playing", 3000);
+  host.close(); back.close();
+});
+
+test("17. nothing a seat lived in is left behind once the room is gone", async () => {
+  await until(async () => (await health()).rooms === 0, 6000, "earlier rooms to expire");
+  const base = await internals();
+
+  const host = await connect("host");
+  const guest = await connect("guest");
+  // Hot Take's loop cycles rounds forever with nobody in the room; Snake's
+  // stops itself once every snake is dead, so it could never show an orphan.
+  await setupGameRoom([host, guest], "hottake");
+
+  const playing = await internals();
+  assert.equal(playing.rooms, 1);
+  assert.equal(playing.sessions, 2);
+  assert.equal(playing.loops, 1, "the game loop is not running");
+
+  drop(host);
+  drop(guest);
+  await until(async () => (await internals()).rooms === 0, GRACE_MS + 3000, "the room to close");
+  await sleep(200);
+
+  const after = await internals();
+  assert.equal(after.sessions, 0, "resume tokens outlived their seats");
+  assert.equal(after.socketToPlayer, 0, "resumed-socket mappings outlived their sockets");
+  assert.equal(after.rateLimits, 0, "rate-limit entries outlived their sockets");
+  assert.equal(after.graceTimers, 0);
+  assert.equal(after.loops, 0, "a closed room's game loop is still running");
+  assert.ok(after.timers <= base.timers, `timers leaked: ${base.timers} -> ${after.timers}`);
+});
+
+test("18. a client cannot flood the log by resuming in a loop", async () => {
+  const host = await connect("host");
+  host.send({ type: "host", name: "host" });
+  await host.waitFor("room");
+  const before = logEvents().filter((e) => e.message === "resume_ok").length;
+
+  let token = host.token;
+  let current = host;
+  for (let i = 0; i < 200; i++) {
+    const next = await open("loop");
+    await next.waitFor("welcome");
+    next.send({ type: "resume", token });
+    await next.waitForMatch("welcome", (m) => m.resumed, 3000);
+    current.ws.terminate();
+    current = next;
+  }
+  const written = logEvents().filter((e) => e.message === "resume_ok").length - before;
+  assert.ok(written < 200, `every resume was logged (${written} lines)`);
+  assert.ok(written <= 120, `resume_ok is not capped per minute (${written} lines)`);
+  current.close();
 });

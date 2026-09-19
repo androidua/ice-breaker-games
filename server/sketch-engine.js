@@ -1,5 +1,20 @@
 const DRAW_DURATION = 45;
 const REVEAL_DURATION = 6;
+// Canvas geometry must match CANVAS_SIZE in src/games/SketchGame.jsx.
+const CANVAS_SIZE = 400;
+// The client sends a piece every STROKE_CHUNK_POINTS (120) points, plus the
+// tail when the finger lifts, so 200 leaves room without allowing a giant one.
+const MAX_STROKE_POINTS = 200;
+// Whole-round point budget: ~20k points is far more than anyone draws by hand
+// in 45s, and bounds the serialised canvas to a few hundred KB.
+const MAX_ROUND_POINTS = 20000;
+const MAX_STROKES = 1000;
+const MAX_GUESSES_PER_PLAYER = 20;
+// The guess feed only ever shows the recent lines; sending every guess of the
+// round to every player on every tick is pure amplification.
+const FEED_GUESSES = 25;
+const DEFAULT_COLOR = "#2a2a2a";
+const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 const WORDS_RAW = [
   // Animals
@@ -182,7 +197,9 @@ export function createSketchState({ players, rng }) {
     turnQueue,
     word: shuffledWords[0],
     strokes: [],
+    pointCount: 0,
     guesses: [],
+    guessCounts: new Map(),
     correctGuessers: [],
     scores,
     round: 1,
@@ -207,19 +224,51 @@ export function handleSketchAction(state, playerId, action) {
   }
 }
 
+// A stroke arrives straight off the wire, so every point is rebuilt here: two
+// finite numbers, rounded and clamped to the canvas. Anything else is dropped.
+// Without this a drawer can put 16 KB of arbitrary JSON in one stroke, and the
+// canvas is re-broadcast to every player — enough to exhaust the server's heap.
+function cleanPoints(points) {
+  if (!Array.isArray(points)) return null;
+  const clean = [];
+  for (const p of points) {
+    if (clean.length >= MAX_STROKE_POINTS) break;
+    if (!p || typeof p !== "object" || Array.isArray(p)) continue;
+    const x = Number(p.x);
+    const y = Number(p.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    clean.push({ x: clampToCanvas(x), y: clampToCanvas(y) });
+  }
+  // One point draws nothing (the client needs two to move the pen).
+  return clean.length >= 2 ? clean : null;
+}
+
+function clampToCanvas(n) {
+  return Math.min(CANVAS_SIZE, Math.max(0, Math.round(n)));
+}
+
 function addStroke(state, playerId, points, color) {
   if (state.status !== "drawing") return state;
   if (playerId !== state.drawerId) return state;
-  if (!Array.isArray(points) || points.length === 0) return state;
-  if (state.strokes.length >= 1000) return state;
+  if (state.strokes.length >= MAX_STROKES) return state;
+  // Strokes are cheap individually; a whole round's worth is the real budget.
+  if ((state.pointCount || 0) >= MAX_ROUND_POINTS) return state;
 
-  const stroke = { points: points.slice(0, 500), color: color || "#2a2a2a" };
-  return { ...state, strokes: [...state.strokes, stroke] };
+  const clean = cleanPoints(points);
+  if (!clean) return state;
+
+  const stroke = { points: clean, color: COLOR_RE.test(color) ? color : DEFAULT_COLOR };
+  return {
+    ...state,
+    strokes: [...state.strokes, stroke],
+    pointCount: (state.pointCount || 0) + clean.length,
+  };
 }
 
 function clearCanvas(state, playerId) {
   if (state.status !== "drawing") return state;
   if (playerId !== state.drawerId) return state;
+  // The point budget is not refunded: clearing must not reset the round's cost.
   return { ...state, strokes: [] };
 }
 
@@ -229,6 +278,9 @@ function submitSketchGuess(state, playerId, text) {
   if (state.correctGuessers.includes(playerId)) return state;
   // Round already won — ignore late guesses
   if (state.roundWinnerId !== null) return state;
+  // Each guess is broadcast to the whole room, so a player gets a fixed budget
+  // per round (Emoji has had one from the start; Sketch hadn't).
+  if ((state.guessCounts.get(playerId) || 0) >= MAX_GUESSES_PER_PLAYER) return state;
 
   const guess = String(text).trim().slice(0, 200);
   if (guess.length === 0) return state;
@@ -239,6 +291,8 @@ function submitSketchGuess(state, playerId, text) {
   const correctGuessers = correct
     ? [...state.correctGuessers, playerId]
     : state.correctGuessers;
+  const guessCounts = new Map(state.guessCounts);
+  guessCounts.set(playerId, (guessCounts.get(playerId) || 0) + 1);
 
   let scores = state.scores;
   let roundWinnerId = state.roundWinnerId;
@@ -252,7 +306,7 @@ function submitSketchGuess(state, playerId, text) {
     revealIn = 3;
   }
 
-  return { ...state, guesses, correctGuessers, scores, roundWinnerId, revealIn };
+  return { ...state, guesses, correctGuessers, guessCounts, scores, roundWinnerId, revealIn };
 }
 
 export function allSketchGuessersCorrect(state) {
@@ -304,7 +358,9 @@ export function nextSketchRound(state, rng) {
     wordPool,
     poolIndex: poolIndex + 1,
     strokes: [],
+    pointCount: 0,
     guesses: [],
+    guessCounts: new Map(),
     correctGuessers: [],
     round: state.round + 1,
     timer: DRAW_DURATION,
@@ -313,13 +369,17 @@ export function nextSketchRound(state, rng) {
   };
 }
 
-export function serializeSketch(state, forPlayerId) {
+// `withStrokes: false` leaves the canvas out. The per-second timer broadcast
+// uses it: the client already has every stroke (they arrive one at a time as
+// they're drawn), so re-sending the whole canvas 8x per second is waste. Any
+// broadcast that has to (re)build a client's view — phase change, resume —
+// sends the strokes.
+export function serializeSketch(state, forPlayerId, { withStrokes = true } = {}) {
   const result = {
     gameType: "sketch",
     status: state.status,
     drawerId: state.drawerId,
-    strokes: state.strokes,
-    guesses: state.guesses,
+    guesses: state.guesses.slice(-FEED_GUESSES),
     round: state.round,
     timer: state.timer,
     scores: Object.fromEntries(state.scores),
@@ -327,6 +387,8 @@ export function serializeSketch(state, forPlayerId) {
     roundWinnerId: state.roundWinnerId,
     revealIn: state.revealIn,
   };
+
+  if (withStrokes) result.strokes = state.strokes;
 
   if (forPlayerId === state.drawerId) {
     result.word = state.word;

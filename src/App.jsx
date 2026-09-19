@@ -34,6 +34,20 @@ const GAME_COMPONENTS = {
   sketch: SketchGame, trivia: TriviaGame, typeracer: TyperacerGame, wordchain: WordChainGame, bomber: BomberGame, hottake: HotTakeVotingGame,
 };
 
+// While a phase is ticking the server sends at least one message a second, so
+// this much silence means the socket is gone even if the browser still calls it
+// open. Six missed ticks is slack enough for a stalled phone or a slow link.
+const SILENCE_LIMIT_MS = 6000;
+
+// The server leaves the Sketch canvas out of the per-second state — strokes
+// arrive one at a time as they are drawn — so a state with no `strokes` keeps
+// the ones this client already has.
+function mergeGameState(prev, next) {
+  if (!next || next.strokes !== undefined) return next;
+  const keep = prev && prev.gameType === next.gameType ? prev.strokes : null;
+  return { ...next, strokes: keep || [] };
+}
+
 const GAME_LABELS = {
   snake: "Snake Arena", truths: "Two Truths & a Lie",
   emoji: "Emoji Storytelling", sketch: "Sketch & Guess", trivia: "Speed Trivia",
@@ -71,6 +85,10 @@ export default function App() {
   const [voting, setVoting] = useState(null);
   const [error, setError] = useState("");
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  // For the silent-socket watchdog below: when the server owes us a message a
+  // second, and when the last one actually arrived.
+  const expectingRef = useRef(false);
+  const lastMessageRef = useRef(Date.now());
 
   const send = (payload) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
@@ -101,6 +119,7 @@ export default function App() {
 
       socket.addEventListener("open", () => {
         attempt = 0;
+        lastMessageRef.current = Date.now();
         setConnection("open");
         const token = storageGet("sessionStorage", RESUME_TOKEN_KEY);
         if (token) {
@@ -125,6 +144,7 @@ export default function App() {
       });
 
       socket.addEventListener("message", (event) => {
+        lastMessageRef.current = Date.now();
         let msg;
         try { msg = JSON.parse(event.data); } catch { return; }
         switch (msg.type) {
@@ -162,7 +182,16 @@ export default function App() {
             if (msg.room.status === "voting") setGame(null);
             break;
           case "state":
-            setGame(msg.state);
+            setGame((prev) => mergeGameState(prev, msg.state));
+            break;
+          // Sketch sends each stroke once instead of the whole canvas.
+          case "sketch_stroke":
+            setGame((prev) => (prev?.gameType === "sketch"
+              ? { ...prev, strokes: [...(prev.strokes || []), msg.stroke] }
+              : prev));
+            break;
+          case "sketch_clear":
+            setGame((prev) => (prev?.gameType === "sketch" ? { ...prev, strokes: [] } : prev));
             break;
           case "vote_state":
             setVoting(msg.voting);
@@ -184,14 +213,42 @@ export default function App() {
       retryTimer = setTimeout(connect, delay);
     };
 
+    // A socket can die without the browser noticing — flaky Wi-Fi, a captive
+    // portal, a middlebox that stops forwarding — and `readyState` still says
+    // OPEN. Nothing then reconnects and the player sits in front of a frozen
+    // game until the server's grace runs out and the seat is gone. Silence
+    // while a phase is ticking is proof enough. This reads traffic the server
+    // already sends, so it adds nothing to the wire in steady state.
+    const socketLooksDead = () =>
+      expectingRef.current && Date.now() - lastMessageRef.current > SILENCE_LIMIT_MS;
+
+    const replaceSocket = () => {
+      lastMessageRef.current = Date.now(); // don't fire again while it reconnects
+      attempt = 0;
+      try { ws?.close(4001, "silent"); } catch { /* already gone */ }
+      connect();
+    };
+
     // Phones suspend background tabs; retry straight away when the page comes
     // back or the network returns instead of waiting out the backoff.
     const reconnectNow = () => {
       if (disposed || replaced) return;
-      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+      const live = ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING);
+      if (live && !socketLooksDead()) return;
+      if (live) {
+        replaceSocket();
+        return;
+      }
       attempt = 0;
       connect();
     };
+
+    // Background tabs throttle timers, so this checks again as soon as the tab
+    // is awake; `reconnectNow` covers the wake-up itself.
+    const watchdog = setInterval(() => {
+      if (disposed || replaced) return;
+      if (ws?.readyState === WebSocket.OPEN && socketLooksDead()) replaceSocket();
+    }, 2000);
     const onVisibility = () => {
       if (document.visibilityState === "visible") reconnectNow();
     };
@@ -203,11 +260,21 @@ export default function App() {
     return () => {
       disposed = true;
       clearTimeout(retryTimer);
+      clearInterval(watchdog);
       window.removeEventListener("online", reconnectNow);
       document.removeEventListener("visibilitychange", onVisibility);
       ws?.close();
     };
   }, []);
+
+  // The watchdog only judges silence when the server owes us a message every
+  // second: the vote screen always ticks, and a game phase does while it has a
+  // countdown. Trivia's "set complete" and Snake's game over have none, and
+  // they wait on the host, so silence there is normal.
+  useEffect(() => {
+    expectingRef.current = room?.status === "voting"
+      || (room?.status === "playing" && (game?.status === "running" || typeof game?.timer === "number"));
+  }, [room?.status, game?.status, game?.timer]);
 
   useEffect(() => {
     const handleKey = (event) => {

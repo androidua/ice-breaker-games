@@ -6,7 +6,7 @@ import { gzip } from "zlib";
 import { monitorEventLoopDelay } from "perf_hooks";
 import { randomUUID } from "crypto";
 import { WebSocketServer } from "ws";
-import { log, logLimited, errorFields } from "./log.js";
+import { log, logLimited, logLifecycle, errorFields } from "./log.js";
 import { parseDsn, inspectEnvelope, createDailyCap, createIpLimiter } from "./sentry-tunnel.js";
 import { initServerSentry, captureError } from "./sentry.js";
 import { createGameState, setSnakeDirection, stepGame } from "./engine.js";
@@ -20,6 +20,7 @@ import { createWordChainState, handleWordChainAction, eliminateCurrentPlayer, re
 import { createBomberState, handleBomberAction, applyImmediateMove, stepBomber, tickBomberTimer, nextBomberRound, serializeBomber, TICK_MS as BOMBER_TICK_MS } from "./bomber-engine.js";
 import { createHotTakeState, handleHotTakeAction, allHotTakeVotesIn, revealHotTake, nextHotTakeRound, tickHotTake, serializeHotTake } from "./hottake-engine.js";
 import { topWinners } from "./scoring.js";
+import { guardedTick } from "./room-loop.js";
 
 const PORT = Number(process.env.PORT || process.env.SNAKE_WS_PORT || 3000);
 const SNAKE_TICK_MS = 120;
@@ -156,7 +157,22 @@ function isFeedbackGloballyCapped() {
 // Cloudflare sets cf-connecting-ip to the real client address. The first
 // X-Forwarded-For entry is client-supplied (Cloudflare appends after it), so it
 // is only a fallback for requests that did not come through Cloudflare.
+//
+// The origin also answers requests that skip Cloudflare entirely (Railway's
+// edge routes on the Host header), and there both headers are whatever the
+// client typed — so per-IP limits could be sidestepped by rotating them. Set
+// TRUSTED_PROXY_SECRET here and add the same header at the Cloudflare edge:
+// requests without it then fall back to the socket address. Unset = as before.
+const TRUSTED_PROXY_SECRET = process.env.TRUSTED_PROXY_SECRET || "";
+const TRUSTED_PROXY_HEADER = (process.env.TRUSTED_PROXY_HEADER || "x-origin-secret").toLowerCase();
+
+function fromTrustedProxy(req) {
+  if (!TRUSTED_PROXY_SECRET) return true; // nothing configured: legacy behaviour
+  return req.headers[TRUSTED_PROXY_HEADER] === TRUSTED_PROXY_SECRET;
+}
+
 function getClientIp(req) {
+  if (!fromTrustedProxy(req)) return req.socket.remoteAddress;
   return (
     req.headers["cf-connecting-ip"] ||
     req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
@@ -274,7 +290,10 @@ function readRawBody(req, maxBytes, hardMaxBytes = 1024 * 1024) {
   });
 }
 
-function readJsonBody(req, maxBytes = 4 * 1024 * 1024) {
+// A screenshot is capped at 2.7 MB of base64, so 3.5 MB covers a valid post.
+const FEEDBACK_MAX_BODY = 3.5 * 1024 * 1024;
+
+function readJsonBody(req, maxBytes = FEEDBACK_MAX_BODY) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
@@ -443,6 +462,23 @@ const httpServer = createServer((req, res) => {
   applySecurityHeaders(res);
   const urlPath = (req.url || "/").split("?")[0];
 
+  // Test-only view of the maps that must return to zero when everyone leaves.
+  // Off in production: nothing sets DEBUG_INTERNALS there.
+  if (process.env.DEBUG_INTERNALS === "1" && urlPath === "/__internals") {
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify({
+      rooms: rooms.size,
+      sessions: sessions.size,
+      socketToPlayer: socketToPlayer.size,
+      rateLimits: rateLimits.size,
+      timers: process.getActiveResourcesInfo().filter((r) => r === "Timeout").length,
+      graceTimers: [...rooms.values()].reduce((n, room) =>
+        n + [...room.players.values()].filter((p) => p.graceTimer).length, 0),
+      loops: [...rooms.values()].filter((room) => room.interval).length,
+    }));
+    return;
+  }
+
   // ── Health / region diagnostics ─────────────────────────────────
   // Plain-curl proof of which build and Railway region is live. region is null
   // off Railway (RAILWAY_REPLICA_REGION is injected only on the platform).
@@ -499,6 +535,15 @@ const httpServer = createServer((req, res) => {
       return;
     }
 
+    // Content-Length is a hint, but an honest client saves us buffering 4 MB
+    // before finding out. readJsonBody still enforces the real limit.
+    const declared = Number(req.headers["content-length"] || 0);
+    if (declared > FEEDBACK_MAX_BODY) {
+      res.writeHead(413, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Request too large." }));
+      return;
+    }
+
     const ip = getClientIp(req);
     if (isFeedbackRateLimited(ip)) {
       logLimited("feedback_rate_limited", {}, "warn"); // never the IP: it's personal data
@@ -507,7 +552,7 @@ const httpServer = createServer((req, res) => {
       return;
     }
 
-    readJsonBody(req)
+    readJsonBody(req, FEEDBACK_MAX_BODY)
       .then((data) => {
         if (!data || typeof data !== "object") {
           throw Object.assign(new Error("Invalid request."), { status: 400 });
@@ -683,7 +728,7 @@ setInterval(() => {
   wss.clients.forEach((ws) => {
     if (ws.isAlive === false) {
       // The "silent disconnect": a socket that stopped answering pings.
-      log("heartbeat_terminate", { player: ws.clientId });
+      logLifecycle("heartbeat_terminate", { player: ws.clientId });
       ws.terminate();
       return;
     }
@@ -790,7 +835,7 @@ function handleHost(ws, clientId, name) {
     ws.send(JSON.stringify({ type: "error", message: "You are already in a room." }));
     return;
   }
-  if (rooms.size >= MAX_ROOMS) {
+  if (rooms.size >= MAX_ROOMS && !reclaimIdleRoom()) {
     ws.send(JSON.stringify({ type: "error", message: "Server is at capacity right now — please try again in a few minutes." }));
     return;
   }
@@ -814,8 +859,42 @@ function handleHost(ws, clientId, name) {
   };
   rooms.set(code, room);
   sessions.set(ws.resumeToken, { playerId: clientId, roomCode: code });
-  log("room_created", { room: code, player: clientId, rooms: rooms.size });
+  logLifecycle("room_created", { room: code, player: clientId, rooms: rooms.size });
   sendRoomUpdate(room);
+}
+
+// Every seat in its resume grace holds the room, so hosting and dropping in a
+// loop could pin all MAX_ROOMS slots with no socket left open and lock out real
+// hosts. At the cap, the oldest room nobody is connected to gives way; a room
+// with anyone in it is never touched.
+function reclaimIdleRoom() {
+  let oldest = null;
+  for (const room of rooms.values()) {
+    if (Array.from(room.players.values()).some((p) => p.connected)) continue;
+    if (!oldest || room.createdAt < oldest.createdAt) oldest = room;
+  }
+  if (!oldest) return false;
+  closeRoom(oldest, "reclaimed");
+  return true;
+}
+
+// Tear a room down whole: grace timers, sessions, the game loop, the room.
+function closeRoom(room, reason) {
+  room.players.forEach((player) => {
+    clearTimeout(player.graceTimer);
+    player.graceTimer = null;
+    sessions.delete(player.resumeToken);
+  });
+  room.players.clear();
+  stopLoop(room);
+  rooms.delete(room.code);
+  logLifecycle("room_closed", {
+    room: room.code,
+    reason,
+    lifetimeSec: Math.round((Date.now() - room.createdAt) / 1000),
+    peakPlayers: room.peakPlayers,
+    gamesPlayed: room.gamesPlayed,
+  });
 }
 
 function handleJoin(ws, clientId, code, name) {
@@ -849,7 +928,7 @@ function handleJoin(ws, clientId, code, name) {
   sessions.set(ws.resumeToken, { playerId: clientId, roomCode: room.code });
   if (!room.gameWins.has(clientId)) room.gameWins.set(clientId, 0);
   room.peakPlayers = Math.max(room.peakPlayers, room.players.size);
-  log("player_joined", { room: room.code, player: clientId, players: room.players.size, status: room.status });
+  logLifecycle("player_joined", { room: room.code, player: clientId, players: room.players.size, status: room.status });
   sendRoomUpdate(room);
   if (room.status === "voting") broadcastVotingState(room);
 }
@@ -878,7 +957,7 @@ function handleEndGame(clientId) {
 
   let roundWins = 0;
   room.roundWins.forEach((n) => { roundWins += n; });
-  log("game_ended", {
+  logLifecycle("game_ended", {
     room: room.code,
     game: room.currentGame,
     round: room.game?.round ?? room.game?.triviaRound ?? null, // snake has no rounds
@@ -945,13 +1024,13 @@ function handleSkipPhase(clientId) {
           stopLoop(room);
           awardRoundWin(room, room.game.roundWinnerId);
           sendRoomUpdate(room);
-          room.pendingAdvance = setTimeout(() => {
+          startPendingAdvance(room, 3000, () => {
             if (!room || room.status !== "playing") return;
             stopLoop(room);
             room.game = nextWordChainRound(room.game, Math.random);
             broadcastGameState(room);
             startWordChainTick(room);
-          }, 3000);
+          });
         }
       }
       break;
@@ -982,9 +1061,21 @@ function handleSocketClose(ws, playerId, code) {
   }
   player.connected = false;
   player.disconnectedAt = Date.now();
+  // An away host can't start, skip or end anything, and the phases with no
+  // timer of their own (lobby, Snake game over, Trivia round_complete) have
+  // nothing else to move them on. Lend the role to someone who is here; they
+  // get it back the moment they resume.
+  if (room.hostId === playerId) {
+    const standIn = Array.from(room.players.values()).find((p) => p.connected);
+    if (standIn) {
+      room.hostId = standIn.id;
+      room.hostReturnsTo = playerId;
+      logLifecycle("host_lent", { room: room.code, from: playerId, to: standIn.id });
+    }
+  }
   player.graceTimer = setTimeout(() => {
     player.graceTimer = null;
-    log("grace_expired", {
+    logLifecycle("grace_expired", {
       room: room.code, player: playerId, graceMs: RESUME_GRACE_MS,
       status: room.status, game: room.currentGame,
     });
@@ -1025,7 +1116,12 @@ function handleResume(ws, clientId, token) {
   player.ws = ws;
   player.connected = true;
   socketToPlayer.set(clientId, player.id);
-  log("resume_ok", {
+  // Take the host role back from whoever was holding it (see handleSocketClose).
+  if (room.hostReturnsTo === player.id) {
+    room.hostId = player.id;
+    room.hostReturnsTo = null;
+  }
+  logLifecycle("resume_ok", {
     room: room.code, player: player.id, conn: clientId, awayMs, replaced,
     status: room.status, game: room.currentGame,
   });
@@ -1046,22 +1142,17 @@ function handleDisconnect(clientId, code) {
 
   const leaver = room.players.get(clientId);
   clearTimeout(leaver.graceTimer);
+  // They're not coming back for the host role they lent out.
+  if (room.hostReturnsTo === clientId) room.hostReturnsTo = null;
   sessions.delete(leaver.resumeToken);
   room.players.delete(clientId);
-  log("player_left", {
+  logLifecycle("player_left", {
     room: room.code, player: clientId, code,
     status: room.status, game: room.currentGame, players: room.players.size,
   });
 
   if (room.players.size === 0) {
-    stopLoop(room);
-    rooms.delete(room.code);
-    log("room_closed", {
-      room: room.code,
-      lifetimeSec: Math.round((Date.now() - room.createdAt) / 1000),
-      peakPlayers: room.peakPlayers,
-      gamesPlayed: room.gamesPlayed,
-    });
+    closeRoom(room, "empty");
     return;
   }
 
@@ -1202,13 +1293,13 @@ function reconcileDisconnect(room, clientId) {
           stopLoop(room);
           awardRoundWin(room, room.game.roundWinnerId);
           sendRoomUpdate(room);
-          room.pendingAdvance = setTimeout(() => {
+          startPendingAdvance(room, room.game.timer * 1000, () => {
             if (!room || room.status !== "playing") return;
             stopLoop(room);
             room.game = nextWordChainRound(room.game, Math.random);
             broadcastGameState(room);
             startWordChainTick(room);
-          }, room.game.timer * 1000);
+          });
         }
       }
       break;
@@ -1258,11 +1349,11 @@ function startVoting(room) {
   sendRoomUpdate(room);
   broadcastVotingState(room);
 
-  room.interval = setInterval(() => {
+  startLoop(room, 1000, () => {
     room.votingState = tickVoting(room.votingState);
     broadcastVotingState(room);
     if (room.votingState.timer <= 0) finishVoting(room);
-  }, 1000);
+  });
 }
 
 function finishVoting(room) {
@@ -1295,13 +1386,18 @@ function startSelectedGame(room, gameName) {
 
   room.gamesPlayed++;
   room.gameStartedAt = Date.now();
-  log("game_started", { room: room.code, game: gameName, players: players.length });
+  logLifecycle("game_started", { room: room.code, game: gameName, players: players.length });
   sendRoomUpdate(room);
 }
 
 function handleGameAction(ws, clientId, action) {
   const room = findRoomByPlayer(clientId);
   if (!room || room.status !== "playing" || !action) return;
+
+  if (process.env.DEBUG_INTERNALS === "1" && action.kind === "__throwOnTick") {
+    room.throwOnTick = true; // see withForcedFailure
+    return;
+  }
 
   try {
     switch (room.currentGame) {
@@ -1331,12 +1427,26 @@ function handleGameAction(ws, clientId, action) {
         }
         break;
       }
-      case "sketch":
-        room.game = handleSketchAction(room.game, clientId, action);
-        // revealIn countdown is started by the engine when first correct guess arrives;
-        // the draw timer tick will handle the transition to reveal.
-        broadcastGameState(room);
+      case "sketch": {
+        const before = room.game;
+        room.game = handleSketchAction(before, clientId, action);
+        // An action the engine refused (over a cap, wrong phase, not the
+        // drawer) changes nothing, so it must not cost a broadcast either.
+        if (room.game === before) break;
+        if (action.kind === "draw" && room.game.strokes.length === before.strokes.length + 1) {
+          // Just the new stroke: the whole canvas per stroke, per player, is
+          // what let one drawer exhaust the server's heap.
+          broadcast(room, { type: "sketch_stroke", stroke: room.game.strokes[room.game.strokes.length - 1] });
+        } else if (action.kind === "clear") {
+          broadcast(room, { type: "sketch_clear" });
+        } else {
+          // A guess moves scores, the feed and revealIn; the canvas is unchanged.
+          // revealIn is started by the engine on the first correct guess and the
+          // draw timer tick turns it into the reveal.
+          broadcastGameState(room, { light: true });
+        }
         break;
+      }
       case "trivia":
         // Host starts the next set after round_complete
         if (action.kind === "nextSet" && clientId === room.hostId && room.game.status === "round_complete") {
@@ -1346,7 +1456,11 @@ function handleGameAction(ws, clientId, action) {
           break;
         }
         room.game = handleTriviaAction(room.game, clientId, action);
-        if (allAnswered(room.game)) {
+        // Only the question phase can be completed by answers. Without the
+        // status check, any action during `reveal` (or `round_complete`, where
+        // the answers of the last question are still on the state) re-ran the
+        // reveal: it re-awarded its points and restarted the reveal timer.
+        if (room.game.status === "question" && allAnswered(room.game)) {
           handleTriviaReveal(room);
         } else {
           broadcastGameState(room);
@@ -1421,7 +1535,7 @@ function startSnake(room, players) {
   room.game = createGameState({ rows: ROWS, cols: COLS, players, rng: Math.random });
   broadcastGameState(room);
 
-  room.interval = setInterval(() => {
+  startLoop(room, SNAKE_TICK_MS, () => {
     room.game = stepGame(room.game, Math.random);
     broadcastGameState(room);
 
@@ -1430,7 +1544,7 @@ function startSnake(room, players) {
       awardRoundWin(room, getSnakeRoundWinner(room.game));
       sendRoomUpdate(room);
     }
-  }, SNAKE_TICK_MS);
+  });
 }
 
 function serializeSnake(game) {
@@ -1459,7 +1573,7 @@ function startTruths(room, players) {
 
 function startTruthsTick(room) {
   stopLoop(room);
-  room.interval = setInterval(() => {
+  startLoop(room, 1000, () => {
     room.game = tickTruths(room.game);
     broadcastGameState(room);
     if (room.game.timer <= 0) {
@@ -1472,7 +1586,7 @@ function startTruthsTick(room) {
         triggerTruthsReveal(room);
       }
     }
-  }, 1000);
+  });
 }
 
 function triggerTruthsReveal(room) {
@@ -1484,7 +1598,7 @@ function triggerTruthsReveal(room) {
 
 function startTruthsRevealTimer(room) {
   stopLoop(room);
-  room.interval = setInterval(() => {
+  startLoop(room, 1000, () => {
     room.game = tickTruths(room.game);
     broadcastGameState(room);
     if (room.game.timer <= 0) {
@@ -1494,7 +1608,7 @@ function startTruthsRevealTimer(room) {
       broadcastGameState(room);
       startTruthsTick(room);
     }
-  }, 1000);
+  });
 }
 
 // ── Emoji Storytelling ───────────────────────────────────────────
@@ -1511,13 +1625,13 @@ function startEmojiGame(room, players) {
 // resolves — the guessing phase used to have no clock and could hang forever.
 function startEmojiComposeTimer(room) {
   stopLoop(room);
-  room.interval = setInterval(() => {
+  startLoop(room, 1000, () => {
     room.game = tickEmoji(room.game);
     broadcastGameState(room);
     if ((room.game.status === "composing" || room.game.status === "guessing") && room.game.timer <= 0) {
       triggerEmojiReveal(room);
     }
-  }, 1000);
+  });
 }
 
 function triggerEmojiReveal(room) {
@@ -1529,7 +1643,7 @@ function triggerEmojiReveal(room) {
 
 function startEmojiRevealTimer(room) {
   stopLoop(room);
-  room.interval = setInterval(() => {
+  startLoop(room, 1000, () => {
     room.game = tickEmoji(room.game);
     broadcastGameState(room);
     if (room.game.timer <= 0) {
@@ -1539,7 +1653,7 @@ function startEmojiRevealTimer(room) {
       broadcastGameState(room);
       startEmojiComposeTimer(room);
     }
-  }, 1000);
+  });
 }
 
 // ── Sketch & Guess ───────────────────────────────────────────────
@@ -1552,10 +1666,9 @@ function startSketchGame(room, players) {
 }
 
 function startSketchDrawTimer(room) {
-  stopLoop(room);
-  room.interval = setInterval(() => {
+  startLoop(room, 1000, () => {
     room.game = tickSketch(room.game);
-    broadcastGameState(room);
+    broadcastGameState(room, { light: true });
     if (room.game.revealIn === 0) {
       // First correct guess countdown finished — transition to reveal
       triggerSketchReveal(room);
@@ -1575,7 +1688,7 @@ function triggerSketchReveal(room) {
 
 function startSketchRevealTimer(room) {
   stopLoop(room);
-  room.interval = setInterval(() => {
+  startLoop(room, 1000, () => {
     room.game = tickSketch(room.game);
     broadcastGameState(room);
     if (room.game.timer <= 0) {
@@ -1585,7 +1698,7 @@ function startSketchRevealTimer(room) {
       broadcastGameState(room);
       startSketchDrawTimer(room);
     }
-  }, 1000);
+  });
 }
 
 // ── Speed Trivia ─────────────────────────────────────────────────
@@ -1595,11 +1708,11 @@ function startTriviaGame(room, players) {
   room.game = createTriviaState({ players, rng: Math.random });
   broadcastGameState(room);
 
-  room.interval = setInterval(() => {
+  startLoop(room, 1000, () => {
     room.game = tickTrivia(room.game);
     broadcastGameState(room);
     if (room.game.timer <= 0) handleTriviaTimerEnd(room);
-  }, 1000);
+  });
 }
 
 function handleTriviaReveal(room) {
@@ -1632,11 +1745,11 @@ function handleTriviaTimerEnd(room) {
 
 function startTriviaTick(room) {
   stopLoop(room);
-  room.interval = setInterval(() => {
+  startLoop(room, 1000, () => {
     room.game = tickTrivia(room.game);
     broadcastGameState(room);
     if (room.game.timer <= 0) handleTriviaTimerEnd(room);
-  }, 1000);
+  });
 }
 
 // ── Typeracer ────────────────────────────────────────────────────
@@ -1649,7 +1762,7 @@ function startTyperacerGame(room, players) {
 
 function startTyperacerTick(room) {
   stopLoop(room);
-  room.interval = setInterval(() => {
+  startLoop(room, 1000, () => {
     room.game = tickTyperacer(room.game);
     broadcastGameState(room);
     if (room.game.status === "racing" && room.game.timer <= 0) {
@@ -1667,7 +1780,7 @@ function startTyperacerTick(room) {
       broadcastGameState(room);
       startTyperacerTick(room);
     }
-  }, 1000);
+  });
 }
 
 function triggerTyperacerReveal(room) {
@@ -1688,7 +1801,7 @@ function startBomberGame(room, players) {
 function startBomberLoop(room) {
   stopLoop(room);
   let secAccum = 0;
-  room.interval = setInterval(() => {
+  startLoop(room, BOMBER_TICK_MS, () => {
     if (!room.game || room.game.status !== "playing") return;
 
     room.game = stepBomber(room.game, Math.random);
@@ -1708,12 +1821,12 @@ function startBomberLoop(room) {
       sendRoomUpdate(room);
       broadcastGameState(room);
       // Auto-advance after round end delay (tracked so a host skip can cancel it)
-      room.pendingAdvance = setTimeout(() => {
+      startPendingAdvance(room, room.game.timer * 1000, () => {
         if (!room || room.status !== "playing") return;
         startNextBomberRound(room);
-      }, room.game.timer * 1000);
+      });
     }
-  }, BOMBER_TICK_MS);
+  });
 }
 
 function startNextBomberRound(room) {
@@ -1733,7 +1846,7 @@ function startHotTakeGame(room, players) {
 
 function startHotTakeTick(room) {
   stopLoop(room);
-  room.interval = setInterval(() => {
+  startLoop(room, 1000, () => {
     room.game = tickHotTake(room.game);
     broadcastGameState(room);
 
@@ -1746,7 +1859,7 @@ function startHotTakeTick(room) {
       broadcastGameState(room);
       startHotTakeTick(room);
     }
-  }, 1000);
+  });
 }
 
 function triggerHotTakeReveal(room) {
@@ -1766,7 +1879,7 @@ function startWordChainGame(room, players) {
 
 function startWordChainTick(room) {
   stopLoop(room);
-  room.interval = setInterval(() => {
+  startLoop(room, 1000, () => {
     room.game = tickWordChain(room.game);
     broadcastGameState(room);
     if (room.game.status === "playing" && room.game.timer <= 0) {
@@ -1777,19 +1890,60 @@ function startWordChainTick(room) {
         awardRoundWin(room, room.game.roundWinnerId);
         sendRoomUpdate(room);
         // Auto-advance after reveal delay (tracked so a host skip can cancel it)
-        room.pendingAdvance = setTimeout(() => {
+        startPendingAdvance(room, room.game.timer * 1000, () => {
           if (!room || room.status !== "playing") return;
           stopLoop(room);
           room.game = nextWordChainRound(room.game, Math.random);
           broadcastGameState(room);
           startWordChainTick(room);
-        }, room.game.timer * 1000);
+        });
       }
     }
-  }, 1000);
+  });
 }
 
 // ── Shared helpers ───────────────────────────────────────────────
+
+// Room timers, guarded (F10). A throw inside a tick keeps its interval
+// scheduled in Node, so the same error used to repeat every tick forever with
+// the room stuck on the state that caused it. Now one room's game is stopped
+// and the room is handed back to the game vote; every other room plays on.
+function startLoop(room, ms, tick) {
+  stopLoop(room);
+  const body = process.env.DEBUG_INTERNALS === "1" ? withForcedFailure(room, tick) : tick;
+  room.interval = setInterval(guardedTick(body, (err) => abortRoomGame(room, err, "tick")), ms);
+}
+
+// Test-only (DEBUG_INTERNALS=1): lets a test arm one throwing tick, which is
+// the only way to exercise the recovery path from outside.
+function withForcedFailure(room, tick) {
+  return () => {
+    if (room.throwOnTick) {
+      room.throwOnTick = false;
+      throw new Error("forced tick failure (DEBUG_INTERNALS)");
+    }
+    tick();
+  };
+}
+
+function startPendingAdvance(room, ms, fn) {
+  room.pendingAdvance = setTimeout(guardedTick(fn, (err) => abortRoomGame(room, err, "advance")), ms);
+}
+
+function abortRoomGame(room, err, where) {
+  logLimited("game_loop_error", {
+    room: room.code, game: room.currentGame, where, status: room.status,
+    ...errorFields(err),
+  }, "error");
+  captureError(err, { where: `game_loop_${where}`, game: room.currentGame });
+  stopLoop(room);
+  if (!rooms.has(room.code)) return;
+  broadcast(room, { type: "error", message: "The game hit a problem and was stopped." });
+  // One retry: if the voting loop itself is what's throwing, leave the room
+  // idle rather than restarting a loop that fails again every second.
+  room.loopFailures = (room.loopFailures || 0) + 1;
+  if (room.loopFailures <= 2) startVoting(room);
+}
 
 function stopLoop(room) {
   if (room.interval) {
@@ -1805,7 +1959,11 @@ function stopLoop(room) {
   }
 }
 
-function broadcastGameState(room) {
+// `light` leaves the Sketch canvas out of the payload: the client already has
+// every stroke, because each one is sent once as it is drawn. The per-second
+// timer broadcast and guess updates use it; anything that has to rebuild a
+// client's view (phase change, resume) sends the full state.
+function broadcastGameState(room, { light = false } = {}) {
   if (!room.game) return;
 
   switch (room.currentGame) {
@@ -1822,7 +1980,7 @@ function broadcastGameState(room) {
       break;
     case "sketch":
       room.players.forEach((player) => {
-        sendTo(player, { type: "state", state: serializeSketch(room.game, player.id) });
+        sendTo(player, { type: "state", state: serializeSketch(room.game, player.id, { withStrokes: !light }) });
       });
       break;
     case "trivia":
@@ -1867,15 +2025,33 @@ function sendRoomUpdate(room) {
   });
 }
 
+// Backpressure. ws queues anything a socket can't take yet, in memory, with no
+// limit of its own — so a slow phone (or a client that stops reading) turns
+// into server heap. Past SKIP we drop frames for that socket only; past DROP
+// the link is gone in all but name, so close it and let them resume the seat.
+const SLOW_SOCKET_SKIP_BYTES = Number(process.env.SLOW_SOCKET_SKIP_BYTES ?? 1024 * 1024);
+const SLOW_SOCKET_DROP_BYTES = Number(process.env.SLOW_SOCKET_DROP_BYTES ?? 8 * 1024 * 1024);
+
+function canSend(ws) {
+  if (ws.readyState !== ws.OPEN) return false;
+  const queued = ws.bufferedAmount;
+  if (queued <= SLOW_SOCKET_SKIP_BYTES) return true;
+  if (queued > SLOW_SOCKET_DROP_BYTES) {
+    logLimited("slow_socket_dropped", { player: ws.clientId, queuedKB: Math.round(queued / 1024) }, "warn");
+    ws.terminate();
+  }
+  return false;
+}
+
 function broadcast(room, payload) {
   const message = JSON.stringify(payload);
   room.players.forEach((player) => {
-    if (player.ws.readyState === player.ws.OPEN) player.ws.send(message);
+    if (canSend(player.ws)) player.ws.send(message);
   });
 }
 
 function sendTo(player, payload) {
-  if (player.ws.readyState === player.ws.OPEN) {
+  if (canSend(player.ws)) {
     player.ws.send(JSON.stringify(payload));
   }
 }

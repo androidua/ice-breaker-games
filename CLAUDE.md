@@ -79,26 +79,28 @@ Hosted on **Railway**, auto-deploying from GitHub on every push.
 
 ### Server (`server/`)
 
-`index.js` (~1300 lines) is the entire server: HTTP static file serving, WebSocket lifecycle, room management, message routing, timer orchestration, and game dispatch. The `rooms` Map is the single source of truth.
+`index.js` (~2050 lines) is the entire server: HTTP static file serving, WebSocket lifecycle, room management, message routing, timer orchestration, and game dispatch. The `rooms` Map is the single source of truth.
 
 Each game has a **pure engine module** (no side effects, no timers, no WebSocket access):
 
 | Engine file | Game | Key functions |
 |---|---|---|
-| `engine.js` | Snake Arena | `createGame()`, `stepGame()`, `changeDirection()` |
-| `truths-engine.js` | Two Truths & a Lie | `createTruthsState()`, `submitStatements()`, `submitGuess()` |
-| `emoji-engine.js` | Emoji Storytelling | `createEmojiState()`, `submitGuess()`, `tickEmoji()` |
-| `sketch-engine.js` | Sketch & Guess | `createSketchState()`, `submitSketchGuess()`, `tickSketch()`, `revealSketch()` |
-| `trivia-engine.js` | Speed Trivia | `createTriviaState()`, `submitAnswer()`, `tickTrivia()` |
+| `engine.js` | Snake Arena | `createGameState()`, `stepGame()`, `setSnakeDirection()` |
+| `truths-engine.js` | Two Truths & a Lie | `createTruthsState()`, `handleTruthsAction()`, `revealTruths()` |
+| `emoji-engine.js` | Emoji Storytelling | `createEmojiState()`, `handleEmojiAction()`, `tickEmoji()` |
+| `sketch-engine.js` | Sketch & Guess | `createSketchState()`, `handleSketchAction()`, `tickSketch()`, `revealSketch()` |
+| `trivia-engine.js` | Speed Trivia | `createTriviaState()`, `handleTriviaAction()`, `tickTrivia()` |
 | `bomber-engine.js` | Bomber Arena | `createBomberState()`, `handleBomberAction()`, `stepBomber()`, `tickBomberTimer()` |
 | `typeracer-engine.js` | Type Racer | `createTyperacerState()`, `handleTyperacerAction()`, `tickTyperacer()` |
 | `wordchain-engine.js` | Word Chain | `createWordChainState()`, `handleWordChainAction()`, `tickWordChain()` |
 | `hottake-engine.js` | Hot Take Voting | `createHotTakeState()`, `handleHotTakeAction()`, `tickHotTake()` |
 | `voting-engine.js` | Game voting phase | `createVotingState()`, `submitVote()`, `resolveVoting()` |
 
+`room-loop.js` is one function, `guardedTick`. Every room timer runs through it (`startLoop`/`startPendingAdvance` in `index.js`): Node reschedules an interval whose callback throws, so before this a bug inside a tick repeated its error every tick — 8x/s for Snake — with the room frozen. Now that one room logs `game_loop_error` once, stops its game, tells the players and returns to the game vote; the other rooms are untouched.
+
 `sentry.js` is errors-only server Sentry (Plan E2 part 2). It has no automatic instrumentation (`defaultIntegrations: false`, `skipOpenTelemetrySetup`, `registerEsmLoaderHooks: false`) and no Sentry process handlers; ours keep the process alive. Events are sent only through `captureError(err, tags)` in the existing error paths: message and game-action catches, uncaught exceptions and unhandled rejections, feedback 5xx. `createErrorGate` allows each distinct error once per 10 minutes and at most 50 per 24h. Client mistakes must stay 4xx (e.g. invalid JSON to `/api/feedback` is a 400) so they never reach Sentry. `serverName` is pinned so a laptop hostname is never sent. Verified: Snake tick timing is unchanged with the SDK loaded, and it adds no event-loop handles; RSS grows by about 20 MB.
 
-`log.js` is structured logging: `log(event, fields, level)` writes one JSON line to stdout in Railway's schema (`message` = event name, `level`, every other field a filterable `@attribute`). `createLimitedLog()` caps an event per minute. Use it for error and abuse events a client or a bug can fire in a loop, so a flood can't push Railway past its 500 lines/s cap. Lifecycle events: `server_started`, `server_shutdown`, `room_created`, `room_closed`, `player_joined`, `player_left` (with WebSocket close code: 1000/1001 normal, 1006 dropped; logged when the seat is actually released, i.e. after the resume grace), `game_started`, `game_ended`, `heartbeat_terminate`, `resume_ok` (`awayMs`, `replaced`, `conn` = the new socket's connection id), `resume_failed` (capped: a client can loop it), `grace_expired`. Never log a `resumeToken`. Errors: `message_error`, `game_action_error`, `uncaught_exception`, `unhandled_rejection`, `feedback_error`. **Never log inside a game tick loop, and never log player names or IPs** (room codes and player ids only). `test/integration/lifecycle-logs.test.js` enforces both.
+`log.js` is structured logging: `log(event, fields, level)` writes one JSON line to stdout in Railway's schema (`message` = event name, `level`, every other field a filterable `@attribute`). `createLimitedLog()` caps an event per minute. Use it for error and abuse events a client or a bug can fire in a loop, so a flood can't push Railway past its 500 lines/s cap. Lifecycle events go through `logLifecycle` (capped at 120 per event per minute) when a client can drive them in a loop — a fresh socket may resume the same seat, and host-then-drop recreates rooms; 1200 lines/s would push Railway past its 500 lines/s cap. Events: `server_started`, `server_shutdown`, `room_created`, `room_closed`, `player_joined`, `player_left` (with WebSocket close code: 1000/1001 normal, 1006 dropped; logged when the seat is actually released, i.e. after the resume grace), `game_started`, `game_ended`, `heartbeat_terminate`, `resume_ok` (`awayMs`, `replaced`, `conn` = the new socket's connection id), `resume_failed` (capped: a client can loop it), `grace_expired`. Never log a `resumeToken`. Errors: `message_error`, `game_action_error`, `uncaught_exception`, `unhandled_rejection`, `feedback_error`. **Never log inside a game tick loop, and never log player names or IPs** (room codes and player ids only). `test/integration/lifecycle-logs.test.js` enforces both.
 
 `words-en.txt` is a bundled 172k-word English dictionary (ENABLE2k, public domain) used by `wordchain-engine.js` for word validation. Loaded once at startup into a Set.
 
@@ -114,9 +116,9 @@ Each game has a **pure engine module** (no side effects, no timers, no WebSocket
 
 ### WebSocket Protocol
 
-Client to server: `host`, `join`, `resume`, `start`, `input`, `vote`, `gameAction`, `endGame`, `skipPhase`, `restart`
+Client to server: `host`, `join`, `resume`, `start`, `input`, `stopInput`, `vote`, `gameAction`, `endGame`, `skipPhase`, `restart`
 
-Server to client: `welcome`, `state`, `vote_state`, `room`, `error`, `resume_failed`
+Server to client: `welcome`, `state`, `vote_state`, `room`, `error`, `resume_failed`, `sketch_stroke`, `sketch_clear`
 
 `welcome` carries `{ id, resumeToken }`; the token goes only to its owner, never into `room`/`state`/`vote_state` or the logs. The server closes a socket with code **4000** when its seat was resumed on a newer socket (last connection wins); the client must not auto-reconnect after a 4000.
 
@@ -127,6 +129,10 @@ Emoji and Sketch serialise state per-player to hide secret words. All other game
 `lobby` -> `voting` -> `playing` -> `voting` -> ... (host ends game to return to voting)
 
 Players can join in `lobby` **and** `voting`; mid-game joins are rejected because every engine freezes its roster at game start.
+
+**Host role while away (v1.22.0).** If the host's socket drops, the star moves to a connected player at once and returns if the original host resumes inside the grace (`hostReturnsTo`). Without it, lobby Start, Snake's game over and Trivia's "Start Next Set" — the phases with no timer — waited out the whole grace, up to ~75s counting heartbeat detection.
+
+**Room reclaim (v1.22.0).** A seat in its grace holds the room, so host-and-drop could pin all `MAX_ROOMS` slots with no socket open. At the cap, `reclaimIdleRoom()` closes the oldest room nobody is connected to; a room with anyone in it is never touched.
 
 **Session resume (Plan D, v1.21.0).** A socket's connection id (`clientId`, also the rate-limit key) is also the player id of the seat it takes. When a player's socket closes, the seat is held for `RESUME_GRACE_MS` (45s): the player stays in `room.players` with `connected: false` (sent in `room` only while away, so the payload is unchanged when everyone is connected) and keeps id, host role, colour, scores, votes and place in the running game. A new socket sends `{ type: "resume", token }` and gets back `welcome { resumed: true }`, `room`, then `vote_state`/`state`; after that `socketToPlayer` maps it to the old player id, via `playerIdFor()` at the top of `handleMessage`. If the grace runs out, the timer calls the normal `handleDisconnect` (host reassignment prefers a connected player, vote pruning, `reconcileDisconnect`); that path is not forked. The storyteller/drawer/presenter gets the same 45s (decided 2026-09-19): phase timers bound a stalled turn and the host can Skip. A room is deleted only when its last seat is released, so a shared Wi-Fi drop doesn't lose it. Resume can't survive a deploy (in-memory); the client then gets `resume_failed` and falls back to the Rejoin banner / prefilled lobby.
 
@@ -139,7 +145,7 @@ Two tiers tracked separately:
 ### Timers
 
 - Snake ticks every 120ms
-- Bomber Arena ticks every 100ms (movement) and 1000ms (round timer)
+- Bomber Arena ticks every 100ms (movement); the round timer counts down from the same loop via an accumulator
 - All other game/voting timers tick every 1000ms
 - WebSocket ping/pong heartbeat runs every 15s to keep connections alive through proxies and load balancers
 - Resume grace: one `setTimeout` per away player (`RESUME_GRACE_MS`, default 45s), cleared on resume
@@ -167,7 +173,7 @@ Current protections:
 - Player name length clamping
 - JSON parse wrapped in try-catch; non-object messages rejected; the whole `handleMessage` dispatch is wrapped in try/catch (a throw escaping the ws `message` listener wedges that socket's receiver until the heartbeat kicks it)
 - Player names and room codes type-checked (`cleanName`) before use
-- Per-client WebSocket rate limit (60 msg/sec sliding window)
+- Per-client WebSocket rate limit (60 msg/sec, fixed 1-second window)
 - 16 KB max WebSocket payload
 - Origin verification on WebSocket handshake (exact hostname match — canonical domain, localhost, 127.0.0.1; rejects cross-site connections)
 - One room per socket (host/join rejected while already in a room) plus a global room cap (`MAX_ROOMS`, default 500, env-overridable)
@@ -175,7 +181,7 @@ Current protections:
 - `process.on('uncaughtException')` + `unhandledRejection` last-resort handlers
 - Full security headers on HTTP responses (CSP, HSTS, X-Frame-Options, Permissions-Policy, Referrer-Policy) The CSP allows only `'self'` plus Cloudflare Web Analytics: `script-src https://static.cloudflareinsights.com` for the beacon, which Cloudflare injects at the edge (kept on by the user), and `connect-src https://cloudflareinsights.com`. It is pinned exactly by `static-http.test.js`.
 - HTTPS canonical redirect
-- Sketch round capped at 1000 strokes (defensive memory guard)
+- Sketch input is validated and budgeted: points must be `{x,y}` numbers (rounded, clamped to the 400x400 canvas), max 200 per stroke, 20k points and 1000 strokes per round, colour must match `#rrggbb`, and each player gets 20 guesses per round. A stroke is broadcast on its own (`sketch_stroke`) and the per-second state leaves the canvas out, so a round's cost is bounded instead of quadratic
 - Feedback API: per-IP rate limit keyed on `cf-connecting-ip` (the first `X-Forwarded-For` entry is client-controlled), global hourly cap on Linear issue creation (`FEEDBACK_GLOBAL_MAX`, default 20), CORS only for the canonical origin + localhost, honeypot, time-trap, screenshot size cap
 - `ws` kept at ≥ 8.21.3 (8.21.0 fixed a remote memory-exhaustion DoS, GHSA-96hv-2xvq-fx4p)
 - Sentry tunnel `POST /api/sentry` (`server/sentry-tunnel.js`) forwards browser error envelopes to Sentry. It accepts only our own DSN, forwards only `event` items (sessions, client reports, traces and replays are dropped) and caps bodies at 256 KB. It rate-limits each IP to 10/hour and allows one global cap of `SENTRY_TUNNEL_DAILY_MAX` events (default 50) per 24h. The client IP is never forwarded. This is the Sentry quota guard: per-key rate limits need a paid Sentry plan, and the org's 5k errors/month is shared with the Nux project. The CSP needs no Sentry host, because the tunnel is same-origin.
@@ -186,12 +192,14 @@ Known gaps to be aware of:
 - **Sentry alerts depend on UI settings.** Browser errors go to project `huddle-play-room` and server errors to `huddle-play-room-server` (org `dmytro-projects`, shared with project `nux`). Email alerts and "Prevent storing IP addresses" are per-project UI settings the MCP can't set or read. Uptime monitoring is on UptimeRobot's free plan instead (the Sentry org's only free uptime slot belongs to Nux). The real check is monitor **804033693**: a **KEYWORD** monitor on `https://huddleplayroom.com/health` (keyword `"ok":true`, alert when it's missing, every 5 min, emails the owner). Free **HTTP** monitors can only send HEAD, and HEAD `/health` falls through to the SPA fallback (200 text/html), so an HTTP monitor proves only that *something* answered. Free KEYWORD monitors send GET and read the body. Verified 2026-09-19: an absent keyword turned the monitor Down, confirmed from 4 locations about 15 s apart, and restoring it brought it back Up. The UptimeRobot connector (claude.ai) can read and update monitors but not delete them.
 - **No input sanitisation beyond length clamping.** Player names and text inputs are JSON-serialised (not rendered as raw HTML), so XSS risk is low. Any future feature rendering user text as HTML must sanitise it.
 - **In-memory state means zero persistence.** Server restart (including Railway redeploys) loses all rooms and scores.
+- **The origin answers without Cloudflare.** Railway routes on the Host header, so `https://huddleplayroom.com` also resolves at Railway's edge directly, where `cf-connecting-ip` is whatever the caller sends. Set `TRUSTED_PROXY_SECRET` (plus a matching Cloudflare transform rule adding `x-origin-secret`) to make the per-IP limits real; unset, they can be sidestepped from a direct connection. The global caps (20 Linear issues/h, 50 tunnel events/day) hold either way.
 
 ## Performance Considerations
 
 - Snake's 120ms tick interval is the tightest loop. Keep `stepGame()` fast and avoid allocations where possible.
-- `broadcastGameState()` serialises per-player for Emoji and Sketch games. With 8 players this means 8 JSON.stringify calls per tick. Fine at current scale but would need attention if game complexity grows.
-- Static caching: only Vite's hashed `/assets/*` get `immutable` (1 year); other `public/` files (favicon, icons, `og-image.png`) get `max-age=86400`; HTML/robots/sitemap/manifest are `no-cache`. A missing `/assets/*` file returns 404 (never index.html). Cloudflare sits in front.
+- `broadcastGameState()` serialises per-player for Emoji and Sketch games. With 8 players this means 8 JSON.stringify calls per tick. Fine at current scale but would need attention if game complexity grows. Sketch's canvas is **not** part of that per-tick payload (see `light` in `broadcastGameState`): re-sending it per player per action is what made one drawer able to exhaust the heap.
+- `broadcast()`/`sendTo()` skip a socket with more than 1 MB queued and terminate one past 8 MB (`canSend`). ws queues without limit otherwise, so a stuck socket became server memory. A terminated player reconnects and resumes their seat.
+- Static caching: only Vite's hashed `/assets/*` get `immutable` (1 year); other `public/` files (favicon, icons, `og-image.png`) get `max-age=86400`; HTML/robots/sitemap/manifest are `no-cache` **at the origin** — Cloudflare's Browser Cache TTL rewrites some of them (checked 2026-09-19: `/robots.txt` and a 404 for a missing `/assets/*` come back `max-age=14400`). A missing `/assets/*` file returns 404 (never index.html). Cloudflare sits in front.
 - Source maps are public on purpose: `build.sourcemap: true`, served as `application/json` under `/assets` with the immutable cache. Sentry fetches them to symbolicate browser stack frames, so no upload step or auth token is needed; the repo is public anyway, and the project setting "Enable JavaScript source fetching" must stay on. **Gotcha:** Vite's chunk hash doesn't cover the `sourceMappingURL` comment, so a chunk whose content differs only by that comment keeps its old name. Cloudflare may then hold the old immutable copy: purge that URL (cloudflare-api MCP, zone `61363c59fe0d92f0313b907d1d0eba99`).
 - Sketch strokes are sent in 120-point pieces while drawing (`STROKE_CHUNK_POINTS` in `SketchGame.jsx`) — a whole long stroke in one message could exceed the 16 KB `maxPayload` and get the drawer disconnected.
 
@@ -215,7 +223,9 @@ Three tiers, all on Node's built-in `node:test` runner (no framework dependency)
 
 A **pre-push git hook** runs `npm run test:all` automatically before every `git push`. If any test fails, the push is blocked. Bypass with `git push --no-verify` if needed. The canonical copy of the hook is committed at `scripts/pre-push`; the live copy in `.git/hooks/` is not committed, so on a fresh clone restore it with `npm run install-hooks` (worktree-safe — installs into the common git dir).
 
-**CI:** `.github/workflows/test.yml` runs `npm ci && npm run test:all` on Node 22 for every push and pull request, so the suite guards production even if the local hook is bypassed or missing. Since 2026-09-19 Railway waits for CI (`checkSuites: true`), so **a red CI run blocks the deploy** — CI is now a gate. Tests must not depend on `npm run build` (CI doesn't build); `static-http.test.js` serves a temp `DIST_DIR` fixture instead. Integration test ports must stay unique across files (node:test runs files in parallel); used so far: 9882–9908. The harness `startServer()` defaults to `RESUME_GRACE_MS=0` (instant removal, the pre-Plan D behaviour the disconnect suites assert); only `resume.test.js` opts into a grace period.
+**CI:** `.github/workflows/test.yml` runs `npm ci && npm run test:all` on Node 22 for every push and pull request, so the suite guards production even if the local hook is bypassed or missing. Since 2026-09-19 Railway waits for CI (`checkSuites: true`), so **a red CI run blocks the deploy** — CI is now a gate. Tests must not depend on `npm run build` (CI doesn't build); `static-http.test.js` serves a temp `DIST_DIR` fixture instead. Integration test ports must stay unique across files (node:test runs files in parallel); used so far: 9882–9915.
+
+Two env vars exist only for tests and are never set in production: `DEBUG_INTERNALS=1` adds `GET /__internals` (map sizes, grace timers, live loops, timer handles) and accepts a `__throwOnTick` game action that makes one tick throw; `SLOW_SOCKET_SKIP_BYTES` / `SLOW_SOCKET_DROP_BYTES` move the backpressure thresholds. They exist because the regressions that matter most here are invisible from the outside: a leaked session, an orphaned loop, a grace timer that was never cleared. **When changing resume, cleanup or loop code, mutation-test it** — break the line on purpose and check a test goes red. Four such regressions passed the whole suite before v1.22.0. The harness `startServer()` defaults to `RESUME_GRACE_MS=0` (instant removal, the pre-Plan D behaviour the disconnect suites assert); only `resume.test.js` opts into a grace period.
 
 After tests pass, if the push targets `refs/heads/main` the hook also background-spawns `scripts/verify-deploy.js`. That script polls Railway for the deployment of the pushed SHA, then curls `huddleplayroom.com` to confirm the new code is live. Results land in `/tmp/hpr-deploy-verify-<short-sha>.log` and a macOS notification fires when complete (~30–90s after push).
 
