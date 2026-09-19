@@ -57,7 +57,8 @@ The footer in the live app displays the current version (e.g. `v1.9.0`). It is s
 
 Hosted on **Railway**, auto-deploying from GitHub on every push.
 
-- Start command (set in Railway dashboard, not in a config file): `node server/index.js`
+- Builder: Railpack, with no custom start command, so Railway runs `npm start` = `vite build && node server/index.js` and rebuilds the bundle on every container start. Checked 2026-09-19 via the service config and deploy logs. `VITE_*` Railway variables are therefore present when the bundle is built.
+- Railway variables: `LINEAR_API_KEY` (feedback), `VITE_SENTRY_DSN` (browser Sentry DSN, read by Vite at build time and by the `/api/sentry` tunnel at runtime).
 - **Region: Southeast Asia — Singapore (`asia-southeast1-eqsg3a`), single replica.** Most players are in Asia, so the server was moved here (from US East) on 2026-06-23 to cut WebSocket RTT — the main lever for real-time games like Snake. Region lives in Railway service settings (`multiRegionConfig`), not in a config file, like the start command. To change it: set `multiRegionConfig` via the Railway API/dashboard and redeploy (no downtime — no volume attached). Single-region only; multi-region replicas need the Pro plan.
 - Railway generates the public domain. The server serves both WebSocket and static files (dist/) from a single port.
 - **Wait for CI is on** (deploy trigger `checkSuites: true`, set 2026-09-19): Railway only deploys a push after the GitHub Actions test workflow passes. **Healthcheck:** `healthcheckPath: /health` (timeout 120s) — a new deploy must answer 200 there before it replaces the old one. `/health` is handled *before* the canonical-host redirect because Railway's probe uses its own Host header; keep it that way or deploys will fail.
@@ -68,7 +69,7 @@ Hosted on **Railway**, auto-deploying from GitHub on every push.
 
 ## Tech Stack
 
-- **Frontend:** React 18, Vite 5, plain CSS (single file: `src/index.css`), native browser WebSocket
+- **Frontend:** React 18, Vite 5, plain CSS (single file: `src/index.css`), native browser WebSocket, `@sentry/react` (errors only, lazy-loaded)
 - **Backend:** Node.js, `ws` library, `http` module for static file serving
 - **Hosting:** Railway (auto-deploy from GitHub)
 - **No database, no backend framework, no CSS preprocessor.** Tests use Node's built-in `node:test` runner — no test framework dependency.
@@ -103,6 +104,7 @@ Each game has a **pure engine module** (no side effects, no timers, no WebSocket
 
 ### Frontend (`src/`)
 
+- `sentry.js` sets up errors-only Sentry (Plan E2). It does nothing unless `VITE_SENTRY_DSN` is set and the page is on `huddleplayroom.com`. The SDK is its own chunk (`sentry-sdk.js`, ~30 KB gzipped), fetched after the page's `load` event. Keep it behind that named-import wrapper: a direct `import("@sentry/react")` pulls in the whole SDK (~160 KB gzipped). `sentry-gate.js` sends each distinct error once and at most 10 per page load. Events go to our own `/api/sentry` tunnel, never straight to Sentry. The game `ErrorBoundary` reports through `reportError()`.
 - `App.jsx` owns the WebSocket connection and all top-level state (`room`, `game`, `voting`, `me`). It routes to the correct game component via the `GAME_COMPONENTS` map.
 - `Lobby.jsx` handles host/join UI before a room exists.
 - `VotingPhase.jsx` renders the game selection voting screen.
@@ -169,11 +171,12 @@ Current protections:
 - Sketch round capped at 1000 strokes (defensive memory guard)
 - Feedback API: per-IP rate limit keyed on `cf-connecting-ip` (the first `X-Forwarded-For` entry is client-controlled), global hourly cap on Linear issue creation (`FEEDBACK_GLOBAL_MAX`, default 20), CORS only for the canonical origin + localhost, honeypot, time-trap, screenshot size cap
 - `ws` kept at ≥ 8.21.3 (8.21.0 fixed a remote memory-exhaustion DoS, GHSA-96hv-2xvq-fx4p)
-- No file system writes, no database. External calls: Linear API (feedback) only.
+- Sentry tunnel `POST /api/sentry` (`server/sentry-tunnel.js`) forwards browser error envelopes to Sentry. It accepts only our own DSN, forwards only `event` items (sessions, client reports, traces and replays are dropped) and caps bodies at 256 KB. It rate-limits each IP to 10/hour and allows one global cap of `SENTRY_TUNNEL_DAILY_MAX` events (default 50) per 24h. The client IP is never forwarded. This is the Sentry quota guard: per-key rate limits need a paid Sentry plan, and the org's 5k errors/month is shared with the Nux project. The CSP needs no Sentry host, because the tunnel is same-origin.
+- No file system writes, no database. External calls: Linear API (feedback), Sentry ingest (via the tunnel).
 
 Known gaps to be aware of:
 - **No session resume.** If a player's WebSocket drops while in a room they lose their seat; the client shows a "Rejoin" banner (reload → lobby prefilled with room code + name) and they can re-enter at the next game vote as a new player. On the start screen (not in a room) the client auto-reconnects with backoff. Plan: `docs/plan-D-reconnect-resume.md`.
-- **No error alerting yet.** Errors are structured JSON lines in Railway logs (filter `@level:error`), but nothing pages anyone. Sentry (errors only) is Plan E2: `docs/plan-E-observability.md`.
+- **Server errors are not in Sentry yet.** Browser errors go to Sentry project `huddle-play-room` (org `nux-kb`, shared with Nux). Server errors are only structured JSON lines in Railway logs (filter `@level:error`) until the server SDK ships (Plan E2 part 2: `docs/plan-E-observability.md`).
 - **No input sanitisation beyond length clamping.** Player names and text inputs are JSON-serialised (not rendered as raw HTML), so XSS risk is low. Any future feature rendering user text as HTML must sanitise it.
 - **In-memory state means zero persistence.** Server restart (including Railway redeploys) loses all rooms and scores.
 
@@ -204,7 +207,7 @@ Three tiers, all on Node's built-in `node:test` runner (no framework dependency)
 
 A **pre-push git hook** runs `npm run test:all` automatically before every `git push`. If any test fails, the push is blocked. Bypass with `git push --no-verify` if needed. The canonical copy of the hook is committed at `scripts/pre-push`; the live copy in `.git/hooks/` is not committed, so on a fresh clone restore it with `npm run install-hooks` (worktree-safe — installs into the common git dir).
 
-**CI:** `.github/workflows/test.yml` runs `npm ci && npm run test:all` on Node 22 for every push and pull request, so the suite guards production even if the local hook is bypassed or missing. Since 2026-09-19 Railway waits for CI (`checkSuites: true`), so **a red CI run blocks the deploy** — CI is now a gate. Tests must not depend on `npm run build` (CI doesn't build); `static-http.test.js` serves a temp `DIST_DIR` fixture instead. Integration test ports must stay unique across files (node:test runs files in parallel); used so far: 9882–9901.
+**CI:** `.github/workflows/test.yml` runs `npm ci && npm run test:all` on Node 22 for every push and pull request, so the suite guards production even if the local hook is bypassed or missing. Since 2026-09-19 Railway waits for CI (`checkSuites: true`), so **a red CI run blocks the deploy** — CI is now a gate. Tests must not depend on `npm run build` (CI doesn't build); `static-http.test.js` serves a temp `DIST_DIR` fixture instead. Integration test ports must stay unique across files (node:test runs files in parallel); used so far: 9882–9905.
 
 After tests pass, if the push targets `refs/heads/main` the hook also background-spawns `scripts/verify-deploy.js`. That script polls Railway for the deployment of the pushed SHA, then curls `huddleplayroom.com` to confirm the new code is live. Results land in `/tmp/hpr-deploy-verify-<short-sha>.log` and a macOS notification fires when complete (~30–90s after push).
 

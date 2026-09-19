@@ -1,6 +1,6 @@
 # Plan E — Logging & error monitoring (structured logs + Sentry)
 
-**Status:** E1 shipped in v1.17.1 (2026-09-19). E2 (Sentry) and E3 (uptime monitor) pending. Written 2026-09-19 alongside v1.17.0.
+**Status:** E1 shipped in v1.17.1. E2 part 1 (browser Sentry + `/api/sentry` tunnel) shipped in v1.18.0 (both 2026-09-19). E2 part 2 (server SDK) and E3 (external uptime monitor) pending. Written 2026-09-19 alongside v1.17.0.
 **Why:** today nobody finds out when something breaks. Server errors go to `console.error` in Railway logs that nobody watches; a React crash shows "Something went wrong" to the player and is never reported; there is no count of rooms/players, so there is no way to tell "is anyone playing right now?" before a deploy (every deploy wipes live rooms). The v1.17.0 review found a bug (malformed message → socket wedged → player kicked 30s later) that was *invisible* in production for exactly this reason.
 
 **Recommendation:** yes — but in two layers, cheapest first:
@@ -14,7 +14,7 @@
 
 Checked on 2026-09-19 (sentry.io/pricing, "Developer" plan): **1 user, unlimited projects, 5k errors/month, 5GB logs, 5M spans, 50 replays, 1 uptime monitor, 1 cron monitor, 30-day retention, email alerts only.**
 
-The user's org is `nux-kb` (region `https://us.sentry.io`) with one existing project, `python`. **Quota is per organisation**, so a new `huddle-play-room` project shares the 5k errors/month with `python`.
+**Setup (done 2026-09-19):** HPR shares the existing Sentry org, slug `nux-kb` (region `https://us.sentry.io`), with the Nux bot. The user renamed the display name and kept the slug. Each app has its own projects: `huddle-play-room` (javascript-react) and `huddle-play-room-server` (node), both owned by team `huddle-play-room`. Nux stays in project `python` (display name "Nux"). **Quota is per organisation**, so HPR shares the 5k errors/month with Nux. **Per-key (DSN) rate limits need a Business/Enterprise plan**: on the free plan the API accepts the setting and silently drops it, which we verified. The user's budget of about 50 events/day per HPR project must therefore be enforced in our own code.
 
 ### Pros
 - **Frontend crashes become visible.** The React `ErrorBoundary` and uncaught browser errors (odd phones, old Safari) are currently silent. This is the biggest blind spot and the thing Sentry is best at.
@@ -64,7 +64,7 @@ Tests: extend `health-endpoint.test.js` (fields present and numeric; `rooms` goe
 
 ## 3. E2 — Sentry, errors only
 
-**Setup (user does the account part):** in Sentry org `nux-kb` create project `huddle-play-room` (platform: React); copy the DSN. Server can use the same DSN or a second `huddle-play-room-server` project (both share the org quota). Add `SENTRY_DSN` to Railway variables. The browser DSN is public by design (it goes in the bundle) — inject at build time via `VITE_SENTRY_DSN`.
+**Setup:** done, see §1. The DSNs come from the Sentry MCP (`find_dsns`) for each project. Server can use the same DSN or a second `huddle-play-room-server` project (both share the org quota). Add `SENTRY_DSN` to Railway variables. The browser DSN is public by design (it goes in the bundle) — inject at build time via `VITE_SENTRY_DSN`.
 
 **Frontend (`src/main.jsx`):**
 - `Sentry.init({ dsn, release: version, environment, sendDefaultPii: false, tracesSampleRate: 0, replaysSessionSampleRate: 0, replaysOnErrorSampleRate: 0 })`.
@@ -72,6 +72,18 @@ Tests: extend `health-endpoint.test.js` (fields present and numeric; `rooms` goe
 - `beforeSend`: drop events when `window.location.hostname` isn't the canonical domain (no dev noise); **throttle to max ~10 events per page load and dedupe identical messages** (protects the shared quota).
 - CSP: add the ingest origin to `connect-src` in `applySecurityHeaders`.
 - Measure the bundle before/after (`npm run build` output). Lazy-load via dynamic `import()` after first render if the increase is large.
+
+**As built, part 1 (v1.18.0):**
+- **Tunnel instead of direct ingest (user decision, option B).** The browser SDK posts to `POST /api/sentry` (`tunnel` option), and `server/sentry-tunnel.js` + `index.js` forward to Sentry. The endpoint:
+  - forwards only our DSN and only `event` items; everything else is dropped with a 200;
+  - caps bodies at 256 KB (drained up to 1 MB, then the connection is cut);
+  - allows 10 requests per IP per hour and one global 50/day cap, answering 429 + Retry-After past it;
+  - never forwards the client IP.
+  One server-side counter is the only way to bound the rate across every browser. The side benefits: ad blockers can't hide errors, and the CSP needs no change because the tunnel is same-origin.
+- **Lazy loading.** The eager SDK added +30.65 KB gzipped (73.78 → 104.43), so it's lazy-loaded after `load`. The main bundle grows by +1.13 KB gzipped and the SDK chunk is 30.06 KB gzipped. A direct `import("@sentry/react")` produced a 162 KB gzipped chunk (the whole namespace), so `src/sentry-sdk.js` re-exports only `init`/`captureException`.
+- **Release name.** The release is `huddle-play-room@<package.json version>`: Sentry releases are org-wide and the org is shared with Nux.
+- **Other settings.** Environment `production`, `sendDefaultPii: false`, `sendClientReports: false`, no BrowserSession integration (no release-health envelope per page load), `beforeSend` deletes `event.user` and applies `createEventGate` (dedupe plus at most 10 per page load).
+- **Local check against a stub ingest.** Two errors plus one duplicate produced 2 envelopes. They were `event` items with release and environment set and `user: null`, carrying no player name, room code, IP or `x-forwarded-for`. The SDK chunk was requested exactly at `loadEventEnd`.
 
 **Server (`server/index.js`, top of file or `server/instrument.js`):**
 - `Sentry.init({ dsn: process.env.SENTRY_DSN, release: APP_VERSION, tracesSampleRate: 0, sendDefaultPii: false })`; no-op when `SENTRY_DSN` is unset (tests, local dev).
@@ -82,7 +94,7 @@ Tests: extend `health-endpoint.test.js` (fields present and numeric; `rooms` goe
 **Sentry project settings:** "Prevent storing of IP addresses" on; data scrubbing defaults on; alert rule: email on new issue + on a regression; check spike protection and set a client key rate limit if the plan offers it.
 
 ## 4. E3 — Uptime monitor
-Sentry free includes **1 uptime monitor** — check whether the `python` project already uses it. Point it at `https://huddleplayroom.com/health` (expects 200 + `"ok":true`), 5-minute interval, email alert. If the slot is taken, Cloudflare Health Checks need a paid plan; UptimeRobot's free tier is the fallback.
+Sentry free includes **1 uptime monitor per organization**. Checked 2026-09-19: the slot is taken by "Nux bot /health" in the shared org. HPR therefore needs an external monitor: UptimeRobot free, which the user signs up for. Point it at `https://huddleplayroom.com/health` (expects 200 + `"ok":true`), 5-minute interval, email alert. If the slot is taken, Cloudflare Health Checks need a paid plan; UptimeRobot's free tier is the fallback.
 
 ## 5. Optional E4 — Cloudflare Web Analytics (SEO/traffic)
 Free, cookie-less page-view analytics for a Cloudflare-proxied site. Useful to see whether the v1.17.0 SEO changes bring visitors. Requires CSP: `script-src https://static.cloudflareinsights.com` and `connect-src https://cloudflareinsights.com`. Enable in the Cloudflare dashboard (Analytics & Logs → Web Analytics) — do it only if the user wants traffic numbers.

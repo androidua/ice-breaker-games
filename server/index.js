@@ -6,6 +6,7 @@ import { gzip } from "zlib";
 import { monitorEventLoopDelay } from "perf_hooks";
 import { WebSocketServer } from "ws";
 import { log, logLimited, errorFields } from "./log.js";
+import { parseDsn, inspectEnvelope, createDailyCap, createIpLimiter } from "./sentry-tunnel.js";
 import { createGameState, setSnakeDirection, stepGame } from "./engine.js";
 import { createVotingState, submitVote, tickVoting, allVotesIn, resolveVoting, serializeVoting } from "./voting-engine.js";
 import { createTruthsState, handleTruthsAction, allTruthsVotesIn, revealTruths, nextTruthsRound, tickTruths, serializeTruths } from "./truths-engine.js";
@@ -173,6 +174,80 @@ const LINEAR_LABELS = {
 };
 const LINEAR_PRIORITIES = { bug: 2, feature: 3, other: 4 };
 const TYPE_DISPLAY = { bug: "Bug", feature: "Feature", other: "Other" };
+
+// ── Sentry tunnel (Plan E2) ─────────────────────────────────────
+// The browser SDK sends error envelopes to POST /api/sentry instead of Sentry.
+// Forwarding them from here puts one counter in front of every browser: the
+// free Sentry plan has no per-key rate limits, and its 5k errors/month is
+// shared with another project in the org. Only our own DSN and only error
+// events pass; the client's IP is never forwarded. Off when the DSN is unset.
+const sentryTarget = parseDsn(process.env.VITE_SENTRY_DSN || "");
+const sentryDailyCap = createDailyCap({ max: Number(process.env.SENTRY_TUNNEL_DAILY_MAX || 50) });
+const sentryIpLimiter = createIpLimiter({ max: 10, windowMs: 60 * 60 * 1000 });
+const SENTRY_MAX_BODY = 256 * 1024;
+setInterval(() => sentryIpLimiter.sweep(), 10 * 60 * 1000).unref();
+
+function sameDsn(a, b) {
+  return a.host === b.host && a.projectId === b.projectId && a.publicKey === b.publicKey;
+}
+
+function handleSentryTunnel(req, res) {
+  const reply = (status, headers = {}) => {
+    res.writeHead(status, headers);
+    res.end();
+  };
+  if (!sentryTarget) return reply(404);
+  if (sentryIpLimiter.hit(getClientIp(req))) return reply(429, { "Retry-After": "3600" });
+
+  readRawBody(req, SENTRY_MAX_BODY)
+    .then(async (body) => {
+      const envelope = inspectEnvelope(body);
+      const dsn = envelope && parseDsn(envelope.dsn);
+      if (!dsn || !sameDsn(dsn, sentryTarget)) return reply(400);
+      // Errors only: sessions, client reports, traces and replays are dropped.
+      if (envelope.types.length === 0 || !envelope.types.every((t) => t === "event")) return reply(200);
+      if (!sentryDailyCap.take()) {
+        logLimited("sentry_tunnel_capped", {}, "warn");
+        return reply(429, { "Retry-After": String(sentryDailyCap.retryAfterSec()) });
+      }
+      const { protocol, host, projectId } = sentryTarget;
+      const upstream = await fetch(`${protocol}//${host}/api/${projectId}/envelope/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-sentry-envelope" },
+        body,
+        signal: AbortSignal.timeout(5000),
+      });
+      log("sentry_event_forwarded", { status: upstream.status }); // bounded by the daily cap
+      const retryAfter = upstream.headers.get("retry-after");
+      reply(upstream.status, retryAfter ? { "Retry-After": retryAfter } : {});
+    })
+    .catch((err) => {
+      if (err.status === 413) return reply(413);
+      logLimited("sentry_tunnel_error", errorFields(err), "error");
+      reply(502);
+    });
+}
+
+// Buffers up to maxBytes. A larger body is drained (not buffered) so the client
+// still gets a clean 413, up to a hard stop that drops the connection.
+function readRawBody(req, maxBytes, hardMaxBytes = 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    const tooLarge = () => Object.assign(new Error("Body too large"), { status: 413 });
+    const chunks = [];
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > hardMaxBytes) {
+        req.destroy();
+        reject(tooLarge());
+      } else if (size <= maxBytes) {
+        chunks.push(chunk);
+      }
+    });
+    req.on("end", () => (size > maxBytes ? reject(tooLarge()) : resolve(Buffer.concat(chunks))));
+    req.on("error", reject);
+  });
+}
 
 function readJsonBody(req, maxBytes = 4 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
@@ -467,6 +542,11 @@ const httpServer = createServer((req, res) => {
         res.writeHead(status, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: message }));
       });
+    return;
+  }
+
+  if (req.method === "POST" && urlPath === "/api/sentry") {
+    handleSentryTunnel(req, res);
     return;
   }
 

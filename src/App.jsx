@@ -13,6 +13,7 @@ import BomberGame from "./games/BomberGame.jsx";
 import HotTakeVotingGame from "./games/HotTakeVotingGame.jsx";
 import FeedbackModal from "./FeedbackModal.jsx";
 import { LAST_ROOM_KEY, storageSet } from "./storage.js";
+import { reportError } from "./sentry.js";
 
 function getWsUrl() {
   const isDev = window.location.port.startsWith("517");
@@ -45,6 +46,7 @@ const GAME_LABELS = {
 class ErrorBoundary extends Component {
   state = { hasError: false };
   static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error, info) { reportError(error, { componentStack: info?.componentStack }); }
   render() {
     if (this.state.hasError) {
       return (
