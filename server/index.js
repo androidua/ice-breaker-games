@@ -1386,6 +1386,7 @@ function startSelectedGame(room, gameName) {
 
   room.gamesPlayed++;
   room.gameStartedAt = Date.now();
+  room.loopFailures = 0; // a game that starts cleanly clears the abort counter
   logLifecycle("game_started", { room: room.code, game: gameName, players: players.length });
   sendRoomUpdate(room);
 }
