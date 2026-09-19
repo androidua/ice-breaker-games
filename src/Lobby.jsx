@@ -1,14 +1,22 @@
 import { useState } from "react";
+import { LAST_ROOM_KEY, NAME_KEY, storageGet, storageSet } from "./storage.js";
 
 export default function Lobby({ connection, error, send }) {
-  const [nameInput, setNameInput] = useState("");
-  const [codeInput, setCodeInput] = useState("");
+  // Prefilled after a reload so a dropped player can rejoin with one tap.
+  const [nameInput, setNameInput] = useState(() => storageGet("localStorage", NAME_KEY));
+  const [codeInput, setCodeInput] = useState(() => storageGet("sessionStorage", LAST_ROOM_KEY));
+
+  const rememberName = () => {
+    if (nameInput.trim()) storageSet("localStorage", NAME_KEY, nameInput.trim());
+  };
 
   const handleHost = () => {
+    rememberName();
     send({ type: "host", name: nameInput || "Player" });
   };
 
   const handleJoin = () => {
+    rememberName();
     send({ type: "join", code: codeInput.trim().toUpperCase(), name: nameInput || "Player" });
   };
 
@@ -42,7 +50,11 @@ export default function Lobby({ connection, error, send }) {
           </button>
         </div>
         <div className="status">
-          {connection === "open" ? "Connected" : `Connection: ${connection}`}
+          {connection === "open"
+            ? "Connected"
+            : connection === "connecting"
+              ? "Connecting…"
+              : "Connection lost. Reconnecting…"}
         </div>
         {error && <div className="error">{error}</div>}
       </div>

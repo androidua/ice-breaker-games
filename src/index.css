@@ -63,6 +63,7 @@ body {
 }
 
 .brand-name {
+  margin: 0; /* it is the page's <h1>; keep the original span layout */
   font-size: 18px;
   font-weight: 700;
   text-transform: uppercase;
@@ -374,12 +375,28 @@ button:disabled {
 }
 
 .disconnected-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
   padding: 10px 16px;
   background: #c04b3a;
   color: #fff;
   font-size: 13px;
   text-align: center;
   letter-spacing: 0.06em;
+}
+
+.rejoin-btn {
+  border-color: #fff;
+  background: #fff;
+  color: #c04b3a;
+  font-weight: 700;
+}
+
+.rejoin-btn:hover {
+  background: #fef0ee;
 }
 
 .error-boundary {

@@ -275,8 +275,12 @@ async function runTests() {
 
     const feedbackUrl = `http://localhost:${PORT}/api/feedback`;
 
-    // OPTIONS preflight → 204
-    const preflightResp = await fetch(feedbackUrl, { method: "OPTIONS" });
+    // OPTIONS preflight → 204 (a real browser preflight always carries an
+    // Origin; CORS is only granted to the site's own origins, e.g. the Vite dev server)
+    const preflightResp = await fetch(feedbackUrl, {
+      method: "OPTIONS",
+      headers: { Origin: "http://localhost:5173", "Access-Control-Request-Method": "POST" },
+    });
     assert(preflightResp.status === 204, "OPTIONS preflight returns 204");
     assert(
       preflightResp.headers.get("access-control-allow-methods") === "POST",

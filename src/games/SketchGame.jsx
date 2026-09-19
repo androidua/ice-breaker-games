@@ -9,6 +9,11 @@ const RULES = [
 
 const CANVAS_SIZE = 400;
 const LINE_WIDTH = 3;
+// Long strokes are sent in pieces while drawing. One whole-stroke message could
+// pass the server's 16 KB frame limit (~900 points, a few seconds on a 120 Hz
+// screen) and get the drawer disconnected; pieces also let guessers see the
+// drawing grow instead of waiting for the finger to lift.
+const STROKE_CHUNK_POINTS = 120;
 const COLORS = ["#2a2a2a", "#3d5a80", "#c04b3a", "#e8b800", "#3a8c4b"];
 
 export default function SketchGame({ game, room, me, send }) {
@@ -47,13 +52,38 @@ export default function SketchGame({ game, room, me, send }) {
     });
   }, []);
 
+  // The unsent tail of the stroke the drawer is making right now.
+  const drawPendingStroke = useCallback(() => {
+    const pts = pointsRef.current;
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx || !drawingRef.current || pts.length < 2) return;
+    ctx.strokeStyle = penColor;
+    ctx.lineWidth = LINE_WIDTH;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+  }, [penColor]);
+
   useEffect(() => {
     if (!game?.strokes) return;
     if (game.strokes.length !== lastStrokeCountRef.current) {
       replayStrokes(game.strokes);
+      // A replay wipes the canvas; put back what the drawer has drawn since
+      // the last piece was sent so the line under their finger doesn't blink.
+      drawPendingStroke();
       lastStrokeCountRef.current = game.strokes.length;
     }
-  }, [game?.strokes, replayStrokes]);
+  }, [game?.strokes, replayStrokes, drawPendingStroke]);
+
+  const sendStrokePiece = (points) => {
+    send({
+      type: "gameAction",
+      action: { kind: "draw", points, color: penColor },
+    });
+  };
 
   const getCanvasPoint = (e) => {
     const canvas = canvasRef.current;
@@ -95,16 +125,19 @@ export default function SketchGame({ game, room, me, send }) {
     ctx.moveTo(pts[pts.length - 2].x, pts[pts.length - 2].y);
     ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
     ctx.stroke();
+
+    if (pts.length >= STROKE_CHUNK_POINTS) {
+      sendStrokePiece(pts);
+      // The next piece starts where this one ended so the line stays joined.
+      pointsRef.current = [pts[pts.length - 1]];
+    }
   };
 
   const handlePointerUp = () => {
     if (!drawingRef.current) return;
     drawingRef.current = false;
     if (pointsRef.current.length > 1) {
-      send({
-        type: "gameAction",
-        action: { kind: "draw", points: pointsRef.current, color: penColor },
-      });
+      sendStrokePiece(pointsRef.current);
     }
     pointsRef.current = [];
   };

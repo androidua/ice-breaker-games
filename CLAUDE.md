@@ -60,6 +60,8 @@ Hosted on **Railway**, auto-deploying from GitHub on every push.
 - Start command (set in Railway dashboard, not in a config file): `node server/index.js`
 - **Region: Southeast Asia — Singapore (`asia-southeast1-eqsg3a`), single replica.** Most players are in Asia, so the server was moved here (from US East) on 2026-06-23 to cut WebSocket RTT — the main lever for real-time games like Snake. Region lives in Railway service settings (`multiRegionConfig`), not in a config file, like the start command. To change it: set `multiRegionConfig` via the Railway API/dashboard and redeploy (no downtime — no volume attached). Single-region only; multi-region replicas need the Pro plan.
 - Railway generates the public domain. The server serves both WebSocket and static files (dist/) from a single port.
+- **Wait for CI is on** (deploy trigger `checkSuites: true`, set 2026-09-19): Railway only deploys a push after the GitHub Actions test workflow passes. **Healthcheck:** `healthcheckPath: /health` (timeout 120s) — a new deploy must answer 200 there before it replaces the old one. `/health` is handled *before* the canonical-host redirect because Railway's probe uses its own Host header; keep it that way or deploys will fail.
+- **Cloudflare sits in front** (zone on the free plan, apex CNAME proxied to Railway). `www.huddleplayroom.com` is a proxied CNAME plus a Cloudflare Single Redirect rule → 301 to the apex (path + query preserved). Keep the Cloudflare proxy: on 2026-09-19 WebSocket RTT via Cloudflare was ~177ms median vs ~360ms direct to `*.up.railway.app`.
 - Free tier may sleep after inactivity; first visitor wakes it in ~5 seconds.
 - No Dockerfile, Procfile, or railway.json exists. Railway detects the Node.js project automatically.
 
@@ -115,6 +117,8 @@ Emoji and Sketch serialise state per-player to hide secret words. All other game
 
 `lobby` -> `voting` -> `playing` -> `voting` -> ... (host ends game to return to voting)
 
+Players can join in `lobby` **and** `voting` (the game-vote screen is the re-entry point for a player whose connection dropped); mid-game joins are rejected because every engine freezes its roster at game start. A player who leaves during `voting` has their vote removed, and the vote resolves immediately if everyone left has voted. There is no session resume yet — a reconnecting player is a new player (see `docs/plan-D-reconnect-resume.md`).
+
 ### Leaderboard
 
 Two tiers tracked separately:
@@ -149,7 +153,8 @@ Current protections:
 - Host-only validation on sensitive actions (start, end game, skip phase)
 - Room capacity enforcement (max 8)
 - Player name length clamping
-- JSON parse wrapped in try-catch
+- JSON parse wrapped in try-catch; non-object messages rejected; the whole `handleMessage` dispatch is wrapped in try/catch (a throw escaping the ws `message` listener wedges that socket's receiver until the heartbeat kicks it)
+- Player names and room codes type-checked (`cleanName`) before use
 - Per-client WebSocket rate limit (60 msg/sec sliding window)
 - 16 KB max WebSocket payload
 - Origin verification on WebSocket handshake (exact hostname match — canonical domain, localhost, 127.0.0.1; rejects cross-site connections)
@@ -159,11 +164,13 @@ Current protections:
 - Full security headers on HTTP responses (CSP, HSTS, X-Frame-Options, Permissions-Policy, Referrer-Policy)
 - HTTPS canonical redirect
 - Sketch round capped at 1000 strokes (defensive memory guard)
-- Feedback API: per-IP rate limit, honeypot, time-trap, screenshot size cap
-- No file system writes, no database, no external API calls
+- Feedback API: per-IP rate limit keyed on `cf-connecting-ip` (the first `X-Forwarded-For` entry is client-controlled), global hourly cap on Linear issue creation (`FEEDBACK_GLOBAL_MAX`, default 20), CORS only for the canonical origin + localhost, honeypot, time-trap, screenshot size cap
+- `ws` kept at ≥ 8.21.3 (8.21.0 fixed a remote memory-exhaustion DoS, GHSA-96hv-2xvq-fx4p)
+- No file system writes, no database. External calls: Linear API (feedback) only.
 
 Known gaps to be aware of:
-- **No reconnection handling.** If a player's WebSocket drops, they lose their session. The frontend does not attempt to reconnect.
+- **No session resume.** If a player's WebSocket drops while in a room they lose their seat; the client shows a "Rejoin" banner (reload → lobby prefilled with room code + name) and they can re-enter at the next game vote as a new player. On the start screen (not in a room) the client auto-reconnects with backoff. Plan: `docs/plan-D-reconnect-resume.md`.
+- **No error monitoring.** Errors only reach Railway logs. Plan: `docs/plan-E-observability.md`.
 - **No input sanitisation beyond length clamping.** Player names and text inputs are JSON-serialised (not rendered as raw HTML), so XSS risk is low. Any future feature rendering user text as HTML must sanitise it.
 - **In-memory state means zero persistence.** Server restart (including Railway redeploys) loses all rooms and scores.
 
@@ -171,7 +178,8 @@ Known gaps to be aware of:
 
 - Snake's 120ms tick interval is the tightest loop. Keep `stepGame()` fast and avoid allocations where possible.
 - `broadcastGameState()` serialises per-player for Emoji and Sketch games. With 8 players this means 8 JSON.stringify calls per tick. Fine at current scale but would need attention if game complexity grows.
-- The static file server in index.js has no caching headers. Railway sits behind a CDN, so this is acceptable for now.
+- Static caching: only Vite's hashed `/assets/*` get `immutable` (1 year); other `public/` files (favicon, icons, `og-image.png`) get `max-age=86400`; HTML/robots/sitemap/manifest are `no-cache`. A missing `/assets/*` file returns 404 (never index.html). Cloudflare sits in front.
+- Sketch strokes are sent in 120-point pieces while drawing (`STROKE_CHUNK_POINTS` in `SketchGame.jsx`) — a whole long stroke in one message could exceed the 16 KB `maxPayload` and get the drawer disconnected.
 
 ## Mobile Support
 
@@ -193,7 +201,7 @@ Three tiers, all on Node's built-in `node:test` runner (no framework dependency)
 
 A **pre-push git hook** runs `npm run test:all` automatically before every `git push`. If any test fails, the push is blocked. Bypass with `git push --no-verify` if needed. The canonical copy of the hook is committed at `scripts/pre-push`; the live copy in `.git/hooks/` is not committed, so on a fresh clone restore it with `npm run install-hooks` (worktree-safe — installs into the common git dir).
 
-**CI:** `.github/workflows/test.yml` runs `npm ci && npm run test:all` on Node 22 for every push and pull request, so the suite guards production even if the local hook is bypassed or missing. Railway still auto-deploys on push to main regardless of CI results — CI is a tripwire, not a gate.
+**CI:** `.github/workflows/test.yml` runs `npm ci && npm run test:all` on Node 22 for every push and pull request, so the suite guards production even if the local hook is bypassed or missing. Since 2026-09-19 Railway waits for CI (`checkSuites: true`), so **a red CI run blocks the deploy** — CI is now a gate. Tests must not depend on `npm run build` (CI doesn't build); `static-http.test.js` serves a temp `DIST_DIR` fixture instead. Integration test ports must stay unique across files (node:test runs files in parallel); used so far: 9882–9899.
 
 After tests pass, if the push targets `refs/heads/main` the hook also background-spawns `scripts/verify-deploy.js`. That script polls Railway for the deployment of the pushed SHA, then curls `huddleplayroom.com` to confirm the new code is live. Results land in `/tmp/hpr-deploy-verify-<short-sha>.log` and a macOS notification fires when complete (~30–90s after push).
 

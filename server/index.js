@@ -1,6 +1,6 @@
 import { createServer } from "http";
 import { readFile, readFileSync, existsSync } from "fs";
-import { join, extname, resolve } from "path";
+import { join, extname, resolve, sep } from "path";
 import { fileURLToPath } from "url";
 import { gzip } from "zlib";
 import { WebSocketServer } from "ws";
@@ -38,7 +38,8 @@ const COLORS = [
 // ── Static file server ───────────────────────────────────────────
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
-const DIST_DIR = join(__dirname, "..", "dist");
+// DIST_DIR is env-overridable so tests can serve a fixture without a build.
+const DIST_DIR = process.env.DIST_DIR ? resolve(process.env.DIST_DIR) : join(__dirname, "..", "dist");
 const HAS_DIST = existsSync(join(DIST_DIR, "index.html"));
 
 // Read once at startup for the /health diagnostic endpoint.
@@ -51,15 +52,20 @@ const MIME_TYPES = {
   ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg",
   ".svg": "image/svg+xml", ".ico": "image/x-icon",
   ".woff": "font/woff", ".woff2": "font/woff2",
+  ".txt": "text/plain; charset=utf-8", ".xml": "application/xml",
+  ".webmanifest": "application/manifest+json",
 };
 
 const CANONICAL_HOST = "huddleplayroom.com";
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
 
-// Assets with Vite-hashed filenames can be cached indefinitely.
+// Only Vite's content-hashed /assets/* files may be cached as immutable. Other
+// static files (favicon, icons, share image) keep stable names, so they get a
+// day-long cache instead — a changed logo would otherwise stay stale for a year.
 const CACHEABLE_EXTS = new Set([".js", ".css", ".woff", ".woff2", ".png", ".jpg", ".svg", ".ico"]);
 
 // Extensions whose content compresses well (text-based).
-const COMPRESSIBLE_EXTS = new Set([".html", ".js", ".css", ".json", ".svg"]);
+const COMPRESSIBLE_EXTS = new Set([".html", ".js", ".css", ".json", ".svg", ".txt", ".xml", ".webmanifest"]);
 
 // ── Feedback rate limiting ──────────────────────────────────────
 const feedbackLimits = new Map(); // ip -> { count, resetAt }
@@ -86,8 +92,49 @@ setInterval(() => {
   }
 }, FEEDBACK_WINDOW_MS);
 
+// Global backstop on real Linear issue creation, independent of client IP, so
+// no amount of IP rotation can flood the tracker. Env-overridable for tests.
+const FEEDBACK_GLOBAL_MAX = Number(process.env.FEEDBACK_GLOBAL_MAX || 20);
+const FEEDBACK_GLOBAL_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+let feedbackGlobal = { count: 0, resetAt: 0 };
+
+function isFeedbackGloballyCapped() {
+  const now = Date.now();
+  if (now > feedbackGlobal.resetAt) {
+    feedbackGlobal = { count: 0, resetAt: now + FEEDBACK_GLOBAL_WINDOW_MS };
+  }
+  feedbackGlobal.count++;
+  return feedbackGlobal.count > FEEDBACK_GLOBAL_MAX;
+}
+
+// Cloudflare sets cf-connecting-ip to the real client address. The first
+// X-Forwarded-For entry is client-supplied (Cloudflare appends after it), so it
+// is only a fallback for requests that did not come through Cloudflare.
+function getClientIp(req) {
+  return (
+    req.headers["cf-connecting-ip"] ||
+    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+    req.socket.remoteAddress
+  );
+}
+
+// CORS is only needed in dev (Vite on :5173 posts to the server on :3000);
+// production requests are same-origin. Never answer arbitrary sites.
+function allowedCorsOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return null;
+  if (origin === `https://${CANONICAL_HOST}`) return origin;
+  try {
+    return LOCAL_HOSTS.has(new URL(origin).hostname) ? origin : null;
+  } catch {
+    return null;
+  }
+}
+
 // Linear API config
 const LINEAR_API_KEY = process.env.LINEAR_API_KEY || "";
+// Overridable so tests can point at a local stub instead of the real API.
+const LINEAR_API_URL = process.env.LINEAR_API_URL || "https://api.linear.app/graphql";
 const LINEAR_TEAM_ID = "82c6c2fb-00ab-4cc2-8bae-720d29295836";
 const LINEAR_PROJECT_ID = "869ddd27-1864-4461-a9d4-b14f12eb367a";
 const LINEAR_BACKLOG_STATE_ID = "da26d051-a623-493c-981c-32dab9139d2d";
@@ -142,7 +189,7 @@ async function uploadScreenshotToLinear(screenshot) {
     }
   }`;
 
-  const uploadResp = await fetch("https://api.linear.app/graphql", {
+  const uploadResp = await fetch(LINEAR_API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: LINEAR_API_KEY },
     body: JSON.stringify({
@@ -215,7 +262,7 @@ async function createLinearIssue({ type, name, subject, description, email, scre
     },
   };
 
-  const resp = await fetch("https://api.linear.app/graphql", {
+  const resp = await fetch(LINEAR_API_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -262,20 +309,16 @@ function sendCompressed(req, res, statusCode, contentType, ext, data) {
 }
 
 const httpServer = createServer((req, res) => {
-  const host = (req.headers.host || "").split(":")[0];
-  if (host && host !== CANONICAL_HOST && host !== "localhost") {
-    applySecurityHeaders(res);
-    res.writeHead(301, { Location: `https://${CANONICAL_HOST}${req.url}` });
-    res.end();
-    return;
-  }
   applySecurityHeaders(res);
+  const urlPath = (req.url || "/").split("?")[0];
 
   // ── Health / region diagnostics ─────────────────────────────────
   // Plain-curl proof of which build and Railway region is live. region is null
   // off Railway (RAILWAY_REPLICA_REGION is injected only on the platform).
-  if (req.method === "GET" && (req.url === "/health" || req.url === "/api/health")) {
-    res.writeHead(200, { "Content-Type": "application/json" });
+  // Answered before the canonical-host redirect: Railway's healthcheck probe
+  // sends its own Host header and must get a 200, not a 301.
+  if (req.method === "GET" && (urlPath === "/health" || urlPath === "/api/health")) {
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     res.end(JSON.stringify({
       ok: true,
       version: APP_VERSION,
@@ -285,21 +328,32 @@ const httpServer = createServer((req, res) => {
     return;
   }
 
+  const host = (req.headers.host || "").split(":")[0];
+  if (host && host !== CANONICAL_HOST && !LOCAL_HOSTS.has(host)) {
+    res.writeHead(301, { Location: `https://${CANONICAL_HOST}${req.url}` });
+    res.end();
+    return;
+  }
+
   // CORS preflight for /api/feedback (dev mode: frontend on :5173, server on :3000)
-  if (req.method === "OPTIONS" && req.url === "/api/feedback") {
-    res.writeHead(204, {
-      "Access-Control-Allow-Origin": "*",
+  if (req.method === "OPTIONS" && urlPath === "/api/feedback") {
+    const corsOrigin = allowedCorsOrigin(req);
+    res.writeHead(204, corsOrigin ? {
+      "Access-Control-Allow-Origin": corsOrigin,
       "Access-Control-Allow-Methods": "POST",
       "Access-Control-Allow-Headers": "Content-Type",
       "Access-Control-Max-Age": "86400",
-    });
+      "Vary": "Origin",
+    } : { "Vary": "Origin" });
     res.end();
     return;
   }
 
   // ── Feedback API ────────────────────────────────────────────────
-  if (req.method === "POST" && req.url === "/api/feedback") {
-    res.setHeader("Access-Control-Allow-Origin", "*");
+  if (req.method === "POST" && urlPath === "/api/feedback") {
+    const corsOrigin = allowedCorsOrigin(req);
+    if (corsOrigin) res.setHeader("Access-Control-Allow-Origin", corsOrigin);
+    res.setHeader("Vary", "Origin");
 
     if (!LINEAR_API_KEY) {
       res.writeHead(503, { "Content-Type": "application/json" });
@@ -307,7 +361,7 @@ const httpServer = createServer((req, res) => {
       return;
     }
 
-    const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress;
+    const ip = getClientIp(req);
     if (isFeedbackRateLimited(ip)) {
       res.writeHead(429, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Too many submissions. Please try again later." }));
@@ -316,6 +370,9 @@ const httpServer = createServer((req, res) => {
 
     readJsonBody(req)
       .then((data) => {
+        if (!data || typeof data !== "object") {
+          throw Object.assign(new Error("Invalid request."), { status: 400 });
+        }
         // ── Spam checks (silent fake-success so bots think they won) ──
         if (data.website) {
           return "__honeypot__";
@@ -344,6 +401,9 @@ const httpServer = createServer((req, res) => {
         if (screenshot && (typeof screenshot !== "string" || screenshot.length > 2.7 * 1024 * 1024)) {
           throw Object.assign(new Error("Screenshot must be under 2MB."), { status: 400 });
         }
+        if (isFeedbackGloballyCapped()) {
+          throw Object.assign(new Error("Feedback is busy right now. Please try again later."), { status: 429 });
+        }
 
         return createLinearIssue({
           type,
@@ -360,8 +420,9 @@ const httpServer = createServer((req, res) => {
       })
       .catch((err) => {
         const status = err.status || 500;
-        const message = status === 400 ? err.message : "Something went wrong.";
-        if (status !== 400) console.error("[feedback] error:", err.message);
+        const message = status < 500 ? err.message : "Something went wrong.";
+        if (status >= 500) console.error("[feedback] error:", err.message);
+        else if (status === 429) console.warn("[feedback] global cap reached");
         res.writeHead(status, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: message }));
       });
@@ -373,21 +434,31 @@ const httpServer = createServer((req, res) => {
     res.end("<html><body><h2>Game server is running.</h2><p>Run <code>npm run build</code> first, or use <code>npm run dev</code> for development.</p></body></html>");
     return;
   }
-  const filePath = resolve(join(DIST_DIR, req.url === "/" ? "index.html" : req.url));
-  if (!filePath.startsWith(DIST_DIR)) {
+  const filePath = resolve(join(DIST_DIR, urlPath === "/" ? "index.html" : urlPath));
+  if (filePath !== DIST_DIR && !filePath.startsWith(DIST_DIR + sep)) {
     res.writeHead(400);
     res.end("Bad request");
     return;
   }
   const ext = extname(filePath);
-  if (CACHEABLE_EXTS.has(ext)) {
-    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-  } else {
-    res.setHeader("Cache-Control", "no-cache");
-  }
   readFile(filePath, (err, data) => {
     if (!err) {
+      if (urlPath.startsWith("/assets/")) {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      } else if (CACHEABLE_EXTS.has(ext)) {
+        res.setHeader("Cache-Control", "public, max-age=86400");
+      } else {
+        res.setHeader("Cache-Control", "no-cache");
+      }
       sendCompressed(req, res, 200, MIME_TYPES[ext] || "application/octet-stream", ext, data);
+      return;
+    }
+    res.setHeader("Cache-Control", "no-cache");
+    // A missing hashed asset (e.g. a stale tab after a deploy) must 404, not get
+    // index.html back as "JavaScript".
+    if (urlPath.startsWith("/assets/")) {
+      res.writeHead(404);
+      res.end("Not found");
       return;
     }
     // SPA fallback — serve index.html for unmatched routes
@@ -473,7 +544,21 @@ wss.on("connection", (ws) => {
       ws.send(JSON.stringify({ type: "error", message: "Invalid JSON." }));
       return;
     }
-    handleMessage(ws, clientId, message);
+    if (!message || typeof message !== "object" || Array.isArray(message)) {
+      ws.send(JSON.stringify({ type: "error", message: "Invalid message." }));
+      return;
+    }
+    // A throw escaping this listener lands inside the ws receiver, which then
+    // stops parsing this socket's frames (pongs included) — the player freezes
+    // and the heartbeat kicks them ~30s later. Contain it to this one message.
+    try {
+      handleMessage(ws, clientId, message);
+    } catch (err) {
+      console.error(`[message] ${message.type} error:`, err && err.message);
+      try {
+        ws.send(JSON.stringify({ type: "error", message: "Action failed." }));
+      } catch { /* socket already closed */ }
+    }
   });
 
   ws.on("close", () => {
@@ -503,7 +588,21 @@ function handleMessage(ws, clientId, message) {
 
 // ── Room lifecycle ───────────────────────────────────────────────
 
-function handleHost(ws, clientId, name = "Player") {
+// Names arrive straight off the wire, so anything that isn't a non-blank string
+// becomes the default rather than throwing on .slice().
+function cleanName(name) {
+  if (typeof name !== "string") return "Player";
+  return name.trim().slice(0, 16) || "Player";
+}
+
+// First palette colour no current player is using. Indexing by player count
+// hands out duplicates once someone leaves and a new player joins.
+function pickColor(room) {
+  const taken = new Set(Array.from(room.players.values(), (p) => p.color));
+  return COLORS.find((c) => !taken.has(c)) || COLORS[room.players.size % COLORS.length];
+}
+
+function handleHost(ws, clientId, name) {
   // One room per socket. Without this a single client can create unlimited
   // rooms, and on disconnect only the first one found is cleaned — the rest
   // hold a dead-socket player forever and leak.
@@ -516,7 +615,7 @@ function handleHost(ws, clientId, name = "Player") {
     return;
   }
   const code = generateRoomCode();
-  const player = { id: clientId, name: name.slice(0, 16), ws, color: COLORS[0] };
+  const player = { id: clientId, name: cleanName(name), ws, color: COLORS[0] };
   const room = {
     code,
     hostId: clientId,
@@ -533,12 +632,14 @@ function handleHost(ws, clientId, name = "Player") {
   sendRoomUpdate(room);
 }
 
-function handleJoin(ws, clientId, code, name = "Player") {
+function handleJoin(ws, clientId, code, name) {
   if (findRoomByPlayer(clientId)) {
     ws.send(JSON.stringify({ type: "error", message: "You are already in a room." }));
     return;
   }
-  const room = rooms.get(String(code).toUpperCase());
+  const room = typeof code === "string" || typeof code === "number"
+    ? rooms.get(String(code).trim().toUpperCase())
+    : null;
   if (!room) {
     ws.send(JSON.stringify({ type: "error", message: "Room not found." }));
     return;
@@ -547,15 +648,19 @@ function handleJoin(ws, clientId, code, name = "Player") {
     ws.send(JSON.stringify({ type: "error", message: "Room is full." }));
     return;
   }
-  if (room.status !== "lobby") {
-    ws.send(JSON.stringify({ type: "error", message: "Game already in progress." }));
+  // Lobby and the game-vote screen are safe entry points: no engine is running,
+  // and the vote threshold uses the live player count. This is also how a player
+  // whose connection dropped gets back in. Mid-game joins stay closed because
+  // every engine freezes its roster when the game starts.
+  if (room.status !== "lobby" && room.status !== "voting") {
+    ws.send(JSON.stringify({ type: "error", message: "A game is in progress. You can join when the next game vote starts." }));
     return;
   }
 
-  const color = COLORS[room.players.size % COLORS.length];
-  room.players.set(clientId, { id: clientId, name: name.slice(0, 16), ws, color });
-  room.gameWins.set(clientId, 0);
+  room.players.set(clientId, { id: clientId, name: cleanName(name), ws, color: pickColor(room) });
+  if (!room.gameWins.has(clientId)) room.gameWins.set(clientId, 0);
   sendRoomUpdate(room);
+  if (room.status === "voting") broadcastVotingState(room);
 }
 
 function handleStart(clientId) {
@@ -676,6 +781,21 @@ function handleDisconnect(clientId) {
 
   if (room.hostId === clientId) {
     room.hostId = room.players.keys().next().value;
+  }
+
+  // A departed player's game vote must stop counting, or "everyone has voted"
+  // fires early; and if they were the last one yet to vote, resolve it now.
+  if (room.status === "voting" && room.votingState) {
+    const votes = new Map(room.votingState.votes);
+    votes.delete(clientId);
+    room.votingState = { ...room.votingState, votes };
+    sendRoomUpdate(room);
+    if (allVotesIn(room.votingState, room.players.size)) {
+      finishVoting(room);
+    } else {
+      broadcastVotingState(room);
+    }
+    return;
   }
 
   // Reconcile the active game's frozen roster with the player who just left,

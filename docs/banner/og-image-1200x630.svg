@@ -1,0 +1,19 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#f4f1ea"/>
+  <defs>
+    <pattern id="hex" width="80" height="138.56" patternUnits="userSpaceOnUse" patternTransform="scale(1.2)">
+      <path d="M40 0 L80 23.09 L80 69.28 L40 92.37 L0 69.28 L0 23.09 Z" fill="none" stroke="#e8e2d9" stroke-width="2"/>
+      <path d="M40 69.28 L80 92.37 L80 138.56 L40 161.65 L0 138.56 L0 92.37 Z" fill="none" stroke="#e8e2d9" stroke-width="2"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="url(#hex)" opacity="0.6"/>
+  <g transform="translate(504, 12) scale(0.75)">
+    <path d="M128 40 L204 84 L204 172 L128 216 L52 172 L52 84 Z" fill="#f4f1ea" stroke="#2a2a2a" stroke-width="10"/>
+    <path d="M128 40 L128 100 M128 100 L170 120 M128 100 L86 120 M128 150 L128 216 M128 150 L170 170 M128 150 L86 170" fill="none" stroke="#2a2a2a" stroke-width="7" stroke-linecap="round"/>
+  </g>
+  <text x="600" y="272" text-anchor="middle" font-family="'Courier New', Courier, monospace" font-size="74" font-weight="900" fill="#2a2a2a" letter-spacing="6">HUDDLE PLAY ROOM</text>
+  <text x="600" y="330" text-anchor="middle" font-family="'Courier New', Courier, monospace" font-size="28" font-weight="700" fill="#3d5a80" letter-spacing="5">FREE MULTIPLAYER PARTY GAMES</text>
+  <rect x="229.9" y="396" width="159.8" height="42" rx="4" fill="#2a2a2a"/><text x="309.8" y="423" text-anchor="middle" font-family="'Courier New', Courier, monospace" font-size="18" font-weight="700" letter-spacing="1" fill="#f7f3ea">SNAKE ARENA</text><rect x="403.7" y="396" width="171.6" height="42" rx="4" fill="#c04b3a"/><text x="489.5" y="423" text-anchor="middle" font-family="'Courier New', Courier, monospace" font-size="18" font-weight="700" letter-spacing="1" fill="#f7f3ea">BOMBER ARENA</text><rect x="589.3" y="396" width="195.2" height="42" rx="4" fill="#5a7d3a"/><text x="686.9" y="423" text-anchor="middle" font-family="'Courier New', Courier, monospace" font-size="18" font-weight="700" letter-spacing="1" fill="#f7f3ea">SKETCH &amp; GUESS</text><rect x="798.5" y="396" width="171.6" height="42" rx="4" fill="#3d5a80"/><text x="884.3" y="423" text-anchor="middle" font-family="'Courier New', Courier, monospace" font-size="18" font-weight="700" letter-spacing="1" fill="#f7f3ea">SPEED TRIVIA</text><rect x="190.2" y="452" width="148.0" height="42" rx="4" fill="#2a2a2a"/><text x="264.2" y="479" text-anchor="middle" font-family="'Courier New', Courier, monospace" font-size="18" font-weight="700" letter-spacing="1" fill="#f7f3ea">TYPE RACER</text><rect x="352.2" y="452" width="148.0" height="42" rx="4" fill="#b6a88f"/><text x="426.2" y="479" text-anchor="middle" font-family="'Courier New', Courier, monospace" font-size="18" font-weight="700" letter-spacing="1" fill="#2a2a2a">WORD CHAIN</text><rect x="514.2" y="452" width="183.4" height="42" rx="4" fill="#c07a30"/><text x="605.9" y="479" text-anchor="middle" font-family="'Courier New', Courier, monospace" font-size="18" font-weight="700" letter-spacing="1" fill="#f7f3ea">EMOJI STORIES</text><rect x="711.6" y="452" width="148.0" height="42" rx="4" fill="#7a3d80"/><text x="785.6" y="479" text-anchor="middle" font-family="'Courier New', Courier, monospace" font-size="18" font-weight="700" letter-spacing="1" fill="#f7f3ea">TWO TRUTHS</text><rect x="873.6" y="452" width="136.2" height="42" rx="4" fill="#3a7d7d"/><text x="941.7" y="479" text-anchor="middle" font-family="'Courier New', Courier, monospace" font-size="18" font-weight="700" letter-spacing="1" fill="#f7f3ea">HOT TAKES</text>
+  <rect x="150" y="540" width="900" height="2" fill="#b6a88f"/>
+  <text x="600" y="585" text-anchor="middle" font-family="'Courier New', Courier, monospace" font-size="19" font-weight="700" fill="#2a2a2a" opacity="0.65" letter-spacing="3">NO DOWNLOAD • NO SIGNUP • 2–8 PLAYERS • HUDDLEPLAYROOM.COM</text>
+</svg>

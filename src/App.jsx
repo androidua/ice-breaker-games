@@ -12,6 +12,7 @@ import WordChainGame from "./games/WordChainGame.jsx";
 import BomberGame from "./games/BomberGame.jsx";
 import HotTakeVotingGame from "./games/HotTakeVotingGame.jsx";
 import FeedbackModal from "./FeedbackModal.jsx";
+import { LAST_ROOM_KEY, storageSet } from "./storage.js";
 
 function getWsUrl() {
   const isDev = window.location.port.startsWith("517");
@@ -71,39 +72,97 @@ export default function App() {
     wsRef.current.send(JSON.stringify(payload));
   };
 
+  const roomRef = useRef(null);
+  useEffect(() => { roomRef.current = room; }, [room]);
+
   useEffect(() => {
-    const ws = new WebSocket(getWsUrl());
-    wsRef.current = ws;
+    let ws = null;
+    let retryTimer = null;
+    let attempt = 0;
+    let disposed = false;
 
-    ws.addEventListener("open", () => setConnection("open"));
-    ws.addEventListener("close", () => setConnection("closed"));
-    ws.addEventListener("error", () => setConnection("error"));
+    const connect = () => {
+      if (disposed) return;
+      clearTimeout(retryTimer);
+      retryTimer = null;
+      setConnection("connecting");
+      const socket = new WebSocket(getWsUrl());
+      ws = socket;
+      wsRef.current = socket;
 
-    ws.addEventListener("message", (event) => {
-      let msg;
-      try { msg = JSON.parse(event.data); } catch { return; }
-      switch (msg.type) {
-        case "welcome":
-          setMe({ id: msg.id });
-          break;
-        case "room":
-          setRoom(msg.room);
-          setError("");
-          if (msg.room.status === "voting") setGame(null);
-          break;
-        case "state":
-          setGame(msg.state);
-          break;
-        case "vote_state":
-          setVoting(msg.voting);
-          break;
-        case "error":
-          setError(msg.message);
-          break;
-      }
-    });
+      socket.addEventListener("open", () => {
+        attempt = 0;
+        setConnection("open");
+      });
+      socket.addEventListener("close", () => {
+        if (wsRef.current !== socket) return; // replaced by a newer socket
+        setConnection("closed");
+        scheduleReconnect();
+      });
+      socket.addEventListener("error", () => {
+        if (wsRef.current === socket) setConnection("error");
+      });
 
-    return () => ws.close();
+      socket.addEventListener("message", (event) => {
+        let msg;
+        try { msg = JSON.parse(event.data); } catch { return; }
+        switch (msg.type) {
+          case "welcome":
+            setMe({ id: msg.id });
+            break;
+          case "room":
+            setRoom(msg.room);
+            setError("");
+            storageSet("sessionStorage", LAST_ROOM_KEY, msg.room.code);
+            if (msg.room.status === "voting") setGame(null);
+            break;
+          case "state":
+            setGame(msg.state);
+            break;
+          case "vote_state":
+            setVoting(msg.voting);
+            break;
+          case "error":
+            setError(msg.message);
+            break;
+        }
+      });
+    };
+
+    // Only reconnect on our own while not in a room: there is no session to
+    // lose, so it is always safe. Inside a room the server has already removed
+    // this player, so the banner offers a rejoin instead. Backoff with jitter
+    // keeps a fleet of idle tabs from hammering a server that is restarting.
+    const scheduleReconnect = () => {
+      if (disposed || roomRef.current || retryTimer) return;
+      const delay = Math.min(10000, 1000 * 2 ** attempt) + Math.random() * 500;
+      attempt++;
+      retryTimer = setTimeout(connect, delay);
+    };
+
+    // Phones suspend background tabs; retry straight away when the page comes
+    // back or the network returns instead of waiting out the backoff.
+    const reconnectNow = () => {
+      if (disposed || roomRef.current) return;
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+      attempt = 0;
+      connect();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") reconnectNow();
+    };
+    window.addEventListener("online", reconnectNow);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    connect();
+
+    return () => {
+      disposed = true;
+      clearTimeout(retryTimer);
+      window.removeEventListener("online", reconnectNow);
+      document.removeEventListener("visibilitychange", onVisibility);
+      ws?.close();
+    };
   }, []);
 
   useEffect(() => {
@@ -133,17 +192,25 @@ export default function App() {
               <path d="M128 40 L204 84 L204 172 L128 216 L52 172 L52 84 Z" fill="none" stroke="#2a2a2a" strokeWidth="10"/>
               <path d="M128 40 L128 100 M128 100 L170 120 M128 100 L86 120 M128 150 L128 216 M128 150 L170 170 M128 150 L86 170" fill="none" stroke="#2a2a2a" strokeWidth="7" strokeLinecap="round"/>
             </svg>
-            <span className="brand-name">Huddle Play Room</span>
+            <h1 className="brand-name">Huddle Play Room</h1>
           </div>
           {!room && <div className="brand-subtitle">Multiplayer party games · up to 8 players</div>}
         </div>
         <div className="topbar-right">{room ? `Room ${room.code}` : ""}</div>
       </header>
 
-      {/* Shown when the WebSocket drops mid-game (e.g. tunnel timeout) */}
+      {/* Shown when the WebSocket drops while in a room. Reloading lands on the
+          lobby with the room code and name filled in; the server lets players
+          (re)join during the lobby and the game-vote screen. */}
       {(connection === "closed" || connection === "error") && room && (
-        <div className="disconnected-banner">
-          Connection lost — please refresh the page to rejoin.
+        <div className="disconnected-banner" role="alert">
+          <span>
+            Connection lost. Rejoin room {room.code}: you can get back in
+            {room.status === "voting" ? " now" : " when the next game vote starts"}.
+          </span>
+          <button type="button" className="rejoin-btn" onClick={() => window.location.reload()}>
+            Rejoin
+          </button>
         </div>
       )}
 

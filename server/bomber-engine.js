@@ -103,7 +103,7 @@ export function handleBomberAction(state, playerId, action) {
   if (action.kind === "move") {
     if (!player.alive) return state;
     const VALID_DIRS = ["up", "down", "left", "right"];
-    const d = action.dir?.toLowerCase();
+    const d = typeof action.dir === "string" ? action.dir.toLowerCase() : null;
     if (!VALID_DIRS.includes(d)) return state;
     const players = new Map(state.players);
     players.set(playerId, { ...player, dir: d, moving: true, movingSetAt: Date.now(), moveStartX: player.x, moveStartY: player.y });
