@@ -88,11 +88,13 @@ export function createClient(wsUrl, name = "client") {
  * running. Returns { proc, stop, stdout } where stop() force-kills it and waits
  * for exit, and stdout() returns everything the server has printed so far.
  * `extraEnv` lets a test override server config (e.g. { MAX_ROOMS: "1" }).
+ * RESUME_GRACE_MS defaults to 0 (a dropped player is removed at once, as before
+ * Plan D); only the resume suite opts into a grace period.
  */
 export function startServer(port, extraEnv = {}) {
   return new Promise((resolve, reject) => {
     const proc = spawn("node", [SERVER_PATH], {
-      env: { ...process.env, PORT: String(port), ...extraEnv },
+      env: { ...process.env, PORT: String(port), RESUME_GRACE_MS: "0", ...extraEnv },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let ready = false;

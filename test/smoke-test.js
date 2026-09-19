@@ -103,7 +103,8 @@ async function runTests() {
     // 1. Start the server
     console.log(colours.bold("\nStarting game server..."));
     server = spawn("node", [SERVER_PATH], {
-      env: { ...process.env, PORT: String(PORT) },
+      // Grace 0: the disconnect check below expects instant removal (pre-Plan D).
+      env: { ...process.env, PORT: String(PORT), RESUME_GRACE_MS: "0" },
       stdio: ["ignore", "pipe", "pipe"],
     });
 

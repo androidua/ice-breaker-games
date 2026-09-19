@@ -1628,3 +1628,17 @@ button:disabled {
     text-align: center;
   }
 }
+
+/* Plan D: the server is holding the seat, so this is a wait, not an error. */
+.disconnected-banner.reconnecting {
+  background: #5a5a5a;
+}
+
+.away-notice {
+  padding: 6px 16px;
+  background: #ebe3d2;
+  border-bottom: 1px solid #d4c9b6;
+  color: #5a5a5a;
+  font-size: 13px;
+  text-align: center;
+}

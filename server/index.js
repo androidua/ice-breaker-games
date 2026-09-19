@@ -4,6 +4,7 @@ import { join, extname, resolve, sep } from "path";
 import { fileURLToPath } from "url";
 import { gzip } from "zlib";
 import { monitorEventLoopDelay } from "perf_hooks";
+import { randomUUID } from "crypto";
 import { WebSocketServer } from "ws";
 import { log, logLimited, errorFields } from "./log.js";
 import { parseDsn, inspectEnvelope, createDailyCap, createIpLimiter } from "./sentry-tunnel.js";
@@ -28,6 +29,9 @@ const MAX_PLAYERS = 8;
 // Global room cap so one client (or a botnet of sockets) can't grow the rooms
 // Map without bound. Env-overridable so tests can exercise the limit cheaply.
 const MAX_ROOMS = Number(process.env.MAX_ROOMS || 500);
+// Plan D: how long a dropped player's seat is held for a resume. 0 removes them
+// at once (the pre-Plan D behaviour, and the test harness default).
+const RESUME_GRACE_MS = Number(process.env.RESUME_GRACE_MS || 45000);
 const COLORS = [
   "#2a2a2a", // dark charcoal
   "#3d5a80", // steel blue
@@ -624,6 +628,16 @@ const httpServer = createServer((req, res) => {
 const rooms = new Map();
 let nextClientId = 1;
 
+// Plan D identity. Each socket gets a connection id (clientId, also the rate
+// limit key). It is also the player id of whatever seat that socket takes, until
+// a new socket resumes the seat and from then on acts as the old player id.
+const socketToPlayer = new Map(); // clientId -> playerId, for resumed sockets only
+const sessions = new Map(); // resumeToken -> { playerId, roomCode }, while the seat exists
+
+function playerIdFor(clientId) {
+  return socketToPlayer.get(clientId) ?? clientId;
+}
+
 // ── Rate limiting ────────────────────────────────────────────────
 // Simple 1-second sliding window per client. Allows burst play actions
 // (Snake direction changes, Bomber moves) while blocking floods.
@@ -684,9 +698,13 @@ wss.on("connection", (ws) => {
 
   const clientId = `p${nextClientId++}`;
   ws.clientId = clientId; // lets the heartbeat log which player it dropped
-  ws.send(JSON.stringify({ type: "welcome", id: clientId }));
+  // Secret proof that this socket owns the seat it takes, for a later resume.
+  // Only its owner ever sees it: never in room/state/vote_state or the logs.
+  ws.resumeToken = randomUUID();
+  ws.send(JSON.stringify({ type: "welcome", id: clientId, resumeToken: ws.resumeToken }));
 
   ws.on("message", (raw) => {
+    if (ws.replaced) return; // its seat was resumed on a newer socket; ignore stragglers
     if (isRateLimited(clientId)) return; // silently drop; don't reward flood with a response
     let message;
     try {
@@ -719,24 +737,30 @@ wss.on("connection", (ws) => {
 
   ws.on("close", (code) => {
     rateLimits.delete(clientId);
-    handleDisconnect(clientId, code);
+    const playerId = playerIdFor(clientId);
+    socketToPlayer.delete(clientId);
+    handleSocketClose(ws, playerId, code);
   });
 });
 
 // ── Message routing ──────────────────────────────────────────────
 
 function handleMessage(ws, clientId, message) {
+  // The handlers act as the player this socket holds a seat for. Their parameter
+  // is still called clientId: before Plan D the two ids were always the same.
+  const playerId = playerIdFor(clientId);
   switch (message.type) {
-    case "host":       handleHost(ws, clientId, message.name); break;
-    case "join":       handleJoin(ws, clientId, message.code, message.name); break;
-    case "start":      handleStart(clientId); break;
-    case "restart":    handleRestart(clientId); break;
-    case "endGame":    handleEndGame(clientId); break;
-    case "skipPhase":  handleSkipPhase(clientId); break;
-    case "input":      handleInput(clientId, message.dir); break;
-    case "stopInput":  handleStopInput(clientId); break;
-    case "vote":       handleVote(clientId, message.game); break;
-    case "gameAction": handleGameAction(ws, clientId, message.action); break;
+    case "host":       handleHost(ws, playerId, message.name); break;
+    case "join":       handleJoin(ws, playerId, message.code, message.name); break;
+    case "resume":     handleResume(ws, clientId, message.token); break;
+    case "start":      handleStart(playerId); break;
+    case "restart":    handleRestart(playerId); break;
+    case "endGame":    handleEndGame(playerId); break;
+    case "skipPhase":  handleSkipPhase(playerId); break;
+    case "input":      handleInput(playerId, message.dir); break;
+    case "stopInput":  handleStopInput(playerId); break;
+    case "vote":       handleVote(playerId, message.game); break;
+    case "gameAction": handleGameAction(ws, playerId, message.action); break;
     default:
       ws.send(JSON.stringify({ type: "error", message: "Unknown message type." }));
   }
@@ -771,7 +795,7 @@ function handleHost(ws, clientId, name) {
     return;
   }
   const code = generateRoomCode();
-  const player = { id: clientId, name: cleanName(name), ws, color: COLORS[0] };
+  const player = { id: clientId, name: cleanName(name), ws, color: COLORS[0], connected: true, resumeToken: ws.resumeToken };
   const room = {
     code,
     hostId: clientId,
@@ -789,6 +813,7 @@ function handleHost(ws, clientId, name) {
     gamesPlayed: 0,
   };
   rooms.set(code, room);
+  sessions.set(ws.resumeToken, { playerId: clientId, roomCode: code });
   log("room_created", { room: code, player: clientId, rooms: rooms.size });
   sendRoomUpdate(room);
 }
@@ -818,7 +843,10 @@ function handleJoin(ws, clientId, code, name) {
     return;
   }
 
-  room.players.set(clientId, { id: clientId, name: cleanName(name), ws, color: pickColor(room) });
+  room.players.set(clientId, {
+    id: clientId, name: cleanName(name), ws, color: pickColor(room), connected: true, resumeToken: ws.resumeToken,
+  });
+  sessions.set(ws.resumeToken, { playerId: clientId, roomCode: room.code });
   if (!room.gameWins.has(clientId)) room.gameWins.set(clientId, 0);
   room.peakPlayers = Math.max(room.peakPlayers, room.players.size);
   log("player_joined", { room: room.code, player: clientId, players: room.players.size, status: room.status });
@@ -940,12 +968,85 @@ function handleSkipPhase(clientId) {
   }
 }
 
+// A socket closed. On the start screen there is nothing to clean up. A player in
+// a room keeps their seat for RESUME_GRACE_MS so a phone that locked or switched
+// networks can resume it; if they don't, handleDisconnect runs exactly as it
+// would have at the moment of the drop, just later.
+function handleSocketClose(ws, playerId, code) {
+  const room = findRoomByPlayer(playerId);
+  const player = room?.players.get(playerId);
+  if (!player || player.ws !== ws) return; // not in a room, or the seat moved to a newer socket
+  if (RESUME_GRACE_MS <= 0) {
+    handleDisconnect(playerId, code);
+    return;
+  }
+  player.connected = false;
+  player.disconnectedAt = Date.now();
+  player.graceTimer = setTimeout(() => {
+    player.graceTimer = null;
+    log("grace_expired", {
+      room: room.code, player: playerId, graceMs: RESUME_GRACE_MS,
+      status: room.status, game: room.currentGame,
+    });
+    handleDisconnect(playerId, code);
+  }, RESUME_GRACE_MS);
+  sendRoomUpdate(room); // others see the seat as away, not gone
+}
+
+// Plan D resume: a new socket takes back a seat, proven by the token from the
+// welcome its player first got. Last connection wins: if the seat's old socket
+// is still open (a second tab, or a dead link the server hasn't noticed yet),
+// it is closed with 4000 so that client knows not to reconnect and fight back.
+function handleResume(ws, clientId, token) {
+  if (findRoomByPlayer(playerIdFor(clientId))) {
+    ws.send(JSON.stringify({ type: "error", message: "You are already in a room." }));
+    return;
+  }
+  const session = typeof token === "string" ? sessions.get(token) : undefined;
+  const room = session && rooms.get(session.roomCode);
+  const player = room?.players.get(session.playerId);
+  if (!player) {
+    // Expired, never a seat, or from before a deploy. A client can send this
+    // in a loop, so it is capped like the other abuse-prone events.
+    logLimited("resume_failed", { conn: clientId });
+    ws.send(JSON.stringify({ type: "resume_failed" }));
+    return;
+  }
+
+  const old = player.ws;
+  const replaced = old.readyState === old.OPEN;
+  if (replaced) {
+    old.replaced = true;
+    old.close(4000, "replaced");
+  }
+  const awayMs = player.connected ? 0 : Date.now() - player.disconnectedAt;
+  clearTimeout(player.graceTimer);
+  player.graceTimer = null;
+  player.ws = ws;
+  player.connected = true;
+  socketToPlayer.set(clientId, player.id);
+  log("resume_ok", {
+    room: room.code, player: player.id, conn: clientId, awayMs, replaced,
+    status: room.status, game: room.currentGame,
+  });
+
+  // What a fresh join would see: identity first, then the room and the live
+  // phase. Emoji/Sketch state goes out per player, so secrets stay private.
+  ws.send(JSON.stringify({ type: "welcome", id: player.id, resumeToken: token, resumed: true }));
+  sendRoomUpdate(room);
+  if (room.status === "voting") broadcastVotingState(room);
+  else if (room.status === "playing") broadcastGameState(room);
+}
+
 // `code` is the WebSocket close code: 1000/1001 for a normal leave, 1006 for a
 // socket that dropped without a close frame (network loss, heartbeat terminate).
 function handleDisconnect(clientId, code) {
   const room = findRoomByPlayer(clientId);
   if (!room) return;
 
+  const leaver = room.players.get(clientId);
+  clearTimeout(leaver.graceTimer);
+  sessions.delete(leaver.resumeToken);
   room.players.delete(clientId);
   log("player_left", {
     room: room.code, player: clientId, code,
@@ -965,7 +1066,9 @@ function handleDisconnect(clientId, code) {
   }
 
   if (room.hostId === clientId) {
-    room.hostId = room.players.keys().next().value;
+    // Prefer someone connected: a host who is away can't start or skip anything.
+    const players = Array.from(room.players.values());
+    room.hostId = (players.find((p) => p.connected) || players[0]).id;
   }
 
   // A departed player's game vote must stop counting, or "everyone has voted"
@@ -1753,9 +1856,11 @@ function sendRoomUpdate(room) {
       hostId: room.hostId,
       status: room.status,
       currentGame: room.currentGame,
-      players: Array.from(room.players.values()).map((p) => ({
-        id: p.id, name: p.name, color: p.color,
-      })),
+      // `connected: false` marks a seat held in the resume grace window. Nobody
+      // away means this payload is byte-for-byte what it was before Plan D.
+      players: Array.from(room.players.values()).map((p) => (p.connected
+        ? { id: p.id, name: p.name, color: p.color }
+        : { id: p.id, name: p.name, color: p.color, connected: false })),
       roundWins: Object.fromEntries(room.roundWins),
       gameWins: Object.fromEntries(room.gameWins),
     },

@@ -1,6 +1,6 @@
 # Plan D — Reconnect & session resume (grace period)
 
-**Status:** planned, not started. Written 2026-09-19 alongside v1.17.0.
+**Status:** shipped in v1.21.0 (2026-09-19). Written 2026-09-19 alongside v1.17.0. See "7. As built" at the end for decisions and deviations.
 **Why:** the #1 real-world failure for a phone party game is a *brief* connection drop — screen lock, app switch, Wi-Fi → mobile data, a lift. Today the server removes the player the instant their socket closes, so the player loses their seat, their round wins and (mid-game) their place in the game. v1.17.0 softened this (rejoin during the game-vote screen, prefilled lobby, a "Rejoin" banner) but the player still comes back as a **new** player and cannot return mid-game.
 **Goal:** a player whose connection drops for up to ~45s silently gets **the same seat back** — same player id, host role, colour, scores, and their place in the running game — without touching anything.
 
@@ -97,3 +97,15 @@ New file `test/integration/resume.test.js` (next free ports: check `grep -h "POR
 
 ## 6. Kickoff prompt for the new session
 > Read `docs/plan-D-reconnect-resume.md` and CLAUDE.md. Implement Plan D test-first: write `test/integration/resume.test.js` cases 1–10 red, then implement §2.1–2.4 on the server and client, keeping `RESUME_GRACE_MS=0` equal to today's behaviour so existing disconnect tests pass unchanged. Don't change tick loops, heartbeat or deflate settings. Decide §2.5's active-role grace with me before coding it. Verify in the browser pane with two tabs, run `npm run test:all`, then bump the minor version and push to `personal` only.
+
+---
+
+## 7. As built (v1.21.0, 2026-09-19)
+
+- **§2.5 decision:** the storyteller/drawer/presenter gets the **same 45s** as everyone. Phase timers (Emoji compose 45s, Sketch draw 45s, Truths submit 60s) bound a stalled turn, the host can Skip, and others see "X is reconnecting…". Tests 11–15 in `resume.test.js` pin the per-game behaviour during grace (Sketch drawer resume and expiry, Trivia completion counting and scores, Snake entity, game-vote carry-over).
+- **`player.ws` is never set to null.** The closed socket stays on the player, and `broadcast`/`sendTo` already skip non-OPEN sockets, so the functions the tick loops call are unchanged. `player.connected` is the away flag.
+- **`connected: false` only while away.** `room` payloads are byte-for-byte unchanged when everyone is connected (checked in the latency A/B).
+- **Token lifetime = seat lifetime.** The token is minted per connection and sent in the existing `welcome`, so there's no new message. It becomes a session in `sessions` on host/join and is deleted in `handleDisconnect`, the only place a seat is released. It isn't rotated on resume: a rotated token lost on a flaky link would cost the seat. A 4000 close stops the two-tab ping-pong instead.
+- **Client:** it saves the token only once it's in a room, so the start screen never sends a pointless `resume`. While a resume is in flight, the socket's own fresh `welcome` is parked, so `me.id` never flickers. Per the user, Rejoin shows only after `resume_failed` (no client-side grace timer). On close code 4000 it shows "You're playing in another tab" with a "Play here" button and doesn't reconnect.
+- **Host reassignment** at grace expiry prefers a connected player (identical to before when nobody is away).
+- **Follow-up idea (not done):** on the browser `online` event, force a fresh socket while in a room. A zombie socket after a Wi-Fi→cellular switch otherwise waits for the browser's own `close`. A duplicate resume is harmless: the server replaces the old socket with 4000, and the client ignores closes from sockets it no longer tracks.

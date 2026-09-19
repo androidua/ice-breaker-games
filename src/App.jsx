@@ -12,7 +12,7 @@ import WordChainGame from "./games/WordChainGame.jsx";
 import BomberGame from "./games/BomberGame.jsx";
 import HotTakeVotingGame from "./games/HotTakeVotingGame.jsx";
 import FeedbackModal from "./FeedbackModal.jsx";
-import { LAST_ROOM_KEY, storageSet } from "./storage.js";
+import { LAST_ROOM_KEY, RESUME_TOKEN_KEY, PLAYER_ID_KEY, storageGet, storageSet, storageRemove } from "./storage.js";
 import { reportError } from "./sentry.js";
 
 function getWsUrl() {
@@ -62,6 +62,9 @@ class ErrorBoundary extends Component {
 export default function App() {
   const wsRef = useRef(null);
   const [connection, setConnection] = useState("connecting");
+  // Plan D session resume: "idle", "pending" (asked for our seat back, no answer
+  // yet) or "failed" (the seat is gone: grace ran out or the server restarted).
+  const [resume, setResume] = useState("idle");
   const [me, setMe] = useState({ id: null });
   const [room, setRoom] = useState(null);
   const [game, setGame] = useState(null);
@@ -74,14 +77,12 @@ export default function App() {
     wsRef.current.send(JSON.stringify(payload));
   };
 
-  const roomRef = useRef(null);
-  useEffect(() => { roomRef.current = room; }, [room]);
-
   useEffect(() => {
     let ws = null;
     let retryTimer = null;
     let attempt = 0;
     let disposed = false;
+    let replaced = false; // another tab resumed our seat; don't fight it for the seat
 
     const connect = () => {
       if (disposed) return;
@@ -91,13 +92,31 @@ export default function App() {
       const socket = new WebSocket(getWsUrl());
       ws = socket;
       wsRef.current = socket;
+      // `seat` is the identity this socket plays as. While a resume is in flight,
+      // the socket's own fresh welcome waits in `fresh`, used only if the server
+      // refuses the resume, so `me` never flickers to a throwaway id.
+      let seat = null;
+      let resuming = false;
+      let fresh = null;
 
       socket.addEventListener("open", () => {
         attempt = 0;
         setConnection("open");
+        const token = storageGet("sessionStorage", RESUME_TOKEN_KEY);
+        if (token) {
+          resuming = true;
+          setResume("pending");
+          socket.send(JSON.stringify({ type: "resume", token }));
+        }
       });
-      socket.addEventListener("close", () => {
+      socket.addEventListener("close", (event) => {
         if (wsRef.current !== socket) return; // replaced by a newer socket
+        if (event.code === 4000) {
+          // Last connection wins: this seat was resumed in another tab.
+          replaced = true;
+          setConnection("replaced");
+          return;
+        }
         setConnection("closed");
         scheduleReconnect();
       });
@@ -110,12 +129,36 @@ export default function App() {
         try { msg = JSON.parse(event.data); } catch { return; }
         switch (msg.type) {
           case "welcome":
+            if (resuming && !msg.resumed) {
+              fresh = msg;
+              break;
+            }
+            resuming = false;
+            seat = msg;
             setMe({ id: msg.id });
+            if (msg.resumed) setResume("idle");
+            break;
+          case "resume_failed":
+            // Fall back to the pre-resume flow: the Rejoin banner, or after a
+            // reload the lobby with the room code and name filled in.
+            resuming = false;
+            seat = fresh;
+            if (fresh) setMe({ id: fresh.id });
+            storageRemove("sessionStorage", RESUME_TOKEN_KEY);
+            storageRemove("sessionStorage", PLAYER_ID_KEY);
+            setResume("failed");
             break;
           case "room":
             setRoom(msg.room);
             setError("");
+            setResume("idle"); // a room message means we hold a live seat again
             storageSet("sessionStorage", LAST_ROOM_KEY, msg.room.code);
+            // Only a seat in a room is worth resuming, so the start screen never
+            // sends a resume that can only fail.
+            if (seat) {
+              storageSet("sessionStorage", RESUME_TOKEN_KEY, seat.resumeToken);
+              storageSet("sessionStorage", PLAYER_ID_KEY, seat.id);
+            }
             if (msg.room.status === "voting") setGame(null);
             break;
           case "state":
@@ -131,12 +174,11 @@ export default function App() {
       });
     };
 
-    // Only reconnect on our own while not in a room: there is no session to
-    // lose, so it is always safe. Inside a room the server has already removed
-    // this player, so the banner offers a rejoin instead. Backoff with jitter
+    // Always reconnect. In a room the server holds our seat for a grace period
+    // and the new socket asks for it back (see "open"). Backoff with jitter
     // keeps a fleet of idle tabs from hammering a server that is restarting.
     const scheduleReconnect = () => {
-      if (disposed || roomRef.current || retryTimer) return;
+      if (disposed || replaced || retryTimer) return;
       const delay = Math.min(10000, 1000 * 2 ** attempt) + Math.random() * 500;
       attempt++;
       retryTimer = setTimeout(connect, delay);
@@ -145,7 +187,7 @@ export default function App() {
     // Phones suspend background tabs; retry straight away when the page comes
     // back or the network returns instead of waiting out the backoff.
     const reconnectNow = () => {
-      if (disposed || roomRef.current) return;
+      if (disposed || replaced) return;
       if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
       attempt = 0;
       connect();
@@ -183,6 +225,9 @@ export default function App() {
   const isHost = room?.hostId === me.id;
   const GameComponent = room?.currentGame ? GAME_COMPONENTS[room.currentGame] : null;
   const gameLabel = room?.currentGame ? GAME_LABELS[room.currentGame] : null;
+  const awayNames = room ? room.players.filter((p) => p.connected === false).map((p) => p.name) : [];
+  const reconnecting = room && resume !== "failed" && connection !== "replaced"
+    && (connection !== "open" || resume === "pending");
 
   return (
     <div className="app">
@@ -201,10 +246,27 @@ export default function App() {
         <div className="topbar-right">{room ? `Room ${room.code}` : ""}</div>
       </header>
 
-      {/* Shown when the WebSocket drops while in a room. Reloading lands on the
-          lobby with the room code and name filled in; the server lets players
-          (re)join during the lobby and the game-vote screen. */}
-      {(connection === "closed" || connection === "error") && room && (
+      {/* The socket dropped but the server is holding our seat: nothing to do
+          but wait while the client reconnects and resumes it. */}
+      {reconnecting && (
+        <div className="disconnected-banner reconnecting" role="status">
+          <span>Connection lost. Reconnecting…</span>
+        </div>
+      )}
+
+      {room && connection === "replaced" && (
+        <div className="disconnected-banner" role="alert">
+          <span>You're playing in another tab.</span>
+          <button type="button" className="rejoin-btn" onClick={() => window.location.reload()}>
+            Play here
+          </button>
+        </div>
+      )}
+
+      {/* The seat is gone (grace ran out, or the server restarted). Reloading
+          lands on the lobby with the room code and name filled in; the server
+          lets players (re)join during the lobby and the game-vote screen. */}
+      {room && resume === "failed" && (
         <div className="disconnected-banner" role="alert">
           <span>
             Connection lost. Rejoin room {room.code}: you can get back in
@@ -216,7 +278,14 @@ export default function App() {
         </div>
       )}
 
-      {!room && <Lobby connection={connection} error={error} send={send} />}
+      {awayNames.length > 0 && connection === "open" && resume !== "failed" && (
+        <div className="away-notice" role="status">
+          {awayNames.join(", ")} {awayNames.length === 1 ? "is" : "are"} reconnecting…
+        </div>
+      )}
+
+      {/* After a reload, the lobby waits (disabled) while we ask for our seat back. */}
+      {!room && <Lobby connection={resume === "pending" ? "connecting" : connection} error={error} send={send} />}
 
       {room && room.status === "lobby" && (
         <main className="lobby">
