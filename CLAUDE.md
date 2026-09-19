@@ -69,7 +69,7 @@ Hosted on **Railway**, auto-deploying from GitHub on every push.
 
 ## Tech Stack
 
-- **Frontend:** React 18, Vite 5, plain CSS (single file: `src/index.css`), native browser WebSocket, `@sentry/react` (errors only, lazy-loaded)
+- **Frontend:** React 18, Vite 6, plain CSS (single file: `src/index.css`), native browser WebSocket, `@sentry/react` (errors only, lazy-loaded)
 - **Backend:** Node.js, `ws` library, `http` module for static file serving
 - **Hosting:** Railway (auto-deploy from GitHub)
 - **No database, no backend framework, no CSS preprocessor.** Tests use Node's built-in `node:test` runner — no test framework dependency.

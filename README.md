@@ -492,7 +492,7 @@ ice-breaker-games/
 
 ## Tech Stack
 
-- **Frontend:** React 18, Vite 5
+- **Frontend:** React 18, Vite 6
 - **Backend:** Node.js, native `ws` WebSocket library
 - **Hosting:** Railway (auto-deploy from GitHub)
 - **Styling:** Plain CSS
