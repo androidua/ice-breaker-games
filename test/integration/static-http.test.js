@@ -34,6 +34,7 @@ before(async () => {
   writeFileSync(join(dist, "manifest.webmanifest"), "{}");
   writeFileSync(join(dist, "favicon.ico"), Buffer.from([0, 0, 1, 0]));
   writeFileSync(join(dist, "assets", "index-abc123.js"), "console.log(1)");
+  writeFileSync(join(dist, "assets", "index-abc123.js.map"), '{"version":3,"sources":[],"mappings":""}');
   writeFileSync(join(dist, "logos", "logo.png"), Buffer.from([137, 80, 78, 71]));
   server = await startServer(PORT, { DIST_DIR: dist });
 });
@@ -88,3 +89,28 @@ test("only hashed /assets/* files are cached as immutable", async () => {
   assert.doesNotMatch(logo, /immutable/);
   assert.match(logo, /max-age=\d+/);
 });
+
+// Source maps are public on purpose (the repo is public): Sentry fetches them to
+// turn minified browser stack frames back into source lines, with no upload
+// step or auth token. They must be served as JSON and cached like their bundle.
+test("source maps under /assets are served as JSON with the immutable cache", async () => {
+  const res = await get("/assets/index-abc123.js.map");
+  assert.equal(res.statusCode, 200);
+  assert.match(res.headers["content-type"], /application\/json/);
+  assert.match(res.headers["cache-control"], /immutable/);
+});
+
+// The CSP is the page's main XSS guard, so pin it exactly. Beyond 'self', the
+// only script origin is Cloudflare Web Analytics, which Cloudflare injects at
+// the edge (the user keeps it on), and its beacon reports to cloudflareinsights.com.
+test("the CSP allows exactly our own origin plus Cloudflare Web Analytics", async () => {
+  const res = await get("/");
+  const csp = Object.fromEntries(
+    res.headers["content-security-policy"].split(";").map((d) => d.trim().split(/\s+/)).map(([k, ...v]) => [k, v])
+  );
+  assert.deepEqual(csp["default-src"], ["'self'"]);
+  assert.deepEqual(csp["script-src"], ["'self'", "https://static.cloudflareinsights.com"]);
+  assert.deepEqual(csp["connect-src"], ["'self'", "wss://huddleplayroom.com", "ws://localhost:*", "https://cloudflareinsights.com"]);
+  assert.deepEqual(csp["img-src"], ["'self'", "data:"]);
+});
+

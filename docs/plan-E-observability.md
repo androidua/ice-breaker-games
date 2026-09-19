@@ -110,6 +110,8 @@ Tests: extend `health-endpoint.test.js` (fields present and numeric; `rooms` goe
 Sentry free includes **1 uptime monitor per organization**. Checked 2026-09-19: the slot is taken by "Nux bot /health" in the shared org. HPR therefore needs an external monitor: UptimeRobot free, which the user signs up for. Point it at `https://huddleplayroom.com/health` (expects 200 + `"ok":true`), 5-minute interval, email alert. If the slot is taken, Cloudflare Health Checks need a paid plan; UptimeRobot's free tier is the fallback.
 
 ## 5. Optional E4 — Cloudflare Web Analytics (SEO/traffic)
+**Done in v1.20.0 (2026-09-19).** Web Analytics was already enabled in Cloudflare (the beacon is injected at the edge) but blocked by our CSP. The user chose to keep it, so the CSP now allows `https://static.cloudflareinsights.com` (script) and `https://cloudflareinsights.com` (connect). The same release turned on public source maps for Sentry symbolication.
+
 Free, cookie-less page-view analytics for a Cloudflare-proxied site. Useful to see whether the v1.17.0 SEO changes bring visitors. Requires CSP: `script-src https://static.cloudflareinsights.com` and `connect-src https://cloudflareinsights.com`. Enable in the Cloudflare dashboard (Analytics & Logs → Web Analytics) — do it only if the user wants traffic numbers.
 
 ---

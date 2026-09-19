@@ -95,6 +95,7 @@ const MIME_TYPES = {
   ".woff": "font/woff", ".woff2": "font/woff2",
   ".txt": "text/plain; charset=utf-8", ".xml": "application/xml",
   ".webmanifest": "application/manifest+json",
+  ".map": "application/json", // public source maps, fetched by Sentry
 };
 
 const CANONICAL_HOST = "huddleplayroom.com";
@@ -106,7 +107,7 @@ const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
 const CACHEABLE_EXTS = new Set([".js", ".css", ".woff", ".woff2", ".png", ".jpg", ".svg", ".ico"]);
 
 // Extensions whose content compresses well (text-based).
-const COMPRESSIBLE_EXTS = new Set([".html", ".js", ".css", ".json", ".svg", ".txt", ".xml", ".webmanifest"]);
+const COMPRESSIBLE_EXTS = new Set([".html", ".js", ".css", ".json", ".svg", ".txt", ".xml", ".webmanifest", ".map"]);
 
 // ── Feedback rate limiting ──────────────────────────────────────
 const feedbackLimits = new Map(); // ip -> { count, resetAt }
@@ -409,7 +410,9 @@ function applySecurityHeaders(res) {
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://huddleplayroom.com ws://localhost:*; img-src 'self' data:");
+  // Cloudflare injects its Web Analytics beacon at the edge; it loads from
+  // static.cloudflareinsights.com and reports to cloudflareinsights.com.
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://huddleplayroom.com ws://localhost:* https://cloudflareinsights.com; img-src 'self' data:");
 }
 
 function sendCompressed(req, res, statusCode, contentType, ext, data) {

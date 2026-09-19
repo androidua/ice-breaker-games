@@ -168,7 +168,7 @@ Current protections:
 - One room per socket (host/join rejected while already in a room) plus a global room cap (`MAX_ROOMS`, default 500, env-overridable)
 - `handleGameAction` switch wrapped in try/catch so an engine throw can't take down the whole server
 - `process.on('uncaughtException')` + `unhandledRejection` last-resort handlers
-- Full security headers on HTTP responses (CSP, HSTS, X-Frame-Options, Permissions-Policy, Referrer-Policy)
+- Full security headers on HTTP responses (CSP, HSTS, X-Frame-Options, Permissions-Policy, Referrer-Policy) The CSP allows only `'self'` plus Cloudflare Web Analytics: `script-src https://static.cloudflareinsights.com` for the beacon, which Cloudflare injects at the edge (kept on by the user), and `connect-src https://cloudflareinsights.com`. It is pinned exactly by `static-http.test.js`.
 - HTTPS canonical redirect
 - Sketch round capped at 1000 strokes (defensive memory guard)
 - Feedback API: per-IP rate limit keyed on `cf-connecting-ip` (the first `X-Forwarded-For` entry is client-controlled), global hourly cap on Linear issue creation (`FEEDBACK_GLOBAL_MAX`, default 20), CORS only for the canonical origin + localhost, honeypot, time-trap, screenshot size cap
@@ -187,6 +187,7 @@ Known gaps to be aware of:
 - Snake's 120ms tick interval is the tightest loop. Keep `stepGame()` fast and avoid allocations where possible.
 - `broadcastGameState()` serialises per-player for Emoji and Sketch games. With 8 players this means 8 JSON.stringify calls per tick. Fine at current scale but would need attention if game complexity grows.
 - Static caching: only Vite's hashed `/assets/*` get `immutable` (1 year); other `public/` files (favicon, icons, `og-image.png`) get `max-age=86400`; HTML/robots/sitemap/manifest are `no-cache`. A missing `/assets/*` file returns 404 (never index.html). Cloudflare sits in front.
+- Source maps are public on purpose: `build.sourcemap: true`, served as `application/json` under `/assets` with the immutable cache. Sentry fetches them to symbolicate browser stack frames, so no upload step or auth token is needed; the repo is public anyway, and the project setting "Enable JavaScript source fetching" must stay on. **Gotcha:** Vite's chunk hash doesn't cover the `sourceMappingURL` comment, so a chunk whose content differs only by that comment keeps its old name. Cloudflare may then hold the old immutable copy: purge that URL (cloudflare-api MCP, zone `61363c59fe0d92f0313b907d1d0eba99`).
 - Sketch strokes are sent in 120-point pieces while drawing (`STROKE_CHUNK_POINTS` in `SketchGame.jsx`) — a whole long stroke in one message could exceed the 16 KB `maxPayload` and get the drawer disconnected.
 
 ## Mobile Support
