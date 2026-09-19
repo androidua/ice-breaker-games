@@ -1,6 +1,6 @@
 # Plan E — Logging & error monitoring (structured logs + Sentry)
 
-**Status:** E1 shipped in v1.17.1. E2 part 1 (browser Sentry + `/api/sentry` tunnel) shipped in v1.18.0. E2 part 2 (server SDK) shipped in v1.19.0 (all 2026-09-19). E3 (external uptime monitor) pending: the org's only free Sentry uptime slot is Nux's. Written 2026-09-19 alongside v1.17.0.
+**Status:** E1 shipped in v1.17.1. E2 part 1 (browser Sentry + `/api/sentry` tunnel) shipped in v1.18.0. E2 part 2 (server SDK) shipped in v1.19.0 (all 2026-09-19). E3 done: an UptimeRobot free KEYWORD monitor on /health (see §4). E4 done in v1.20.0. Written 2026-09-19 alongside v1.17.0.
 **Why:** today nobody finds out when something breaks. Server errors go to `console.error` in Railway logs that nobody watches; a React crash shows "Something went wrong" to the player and is never reported; there is no count of rooms/players, so there is no way to tell "is anyone playing right now?" before a deploy (every deploy wipes live rooms). The v1.17.0 review found a bug (malformed message → socket wedged → player kicked 30s later) that was *invisible* in production for exactly this reason.
 
 **Recommendation:** yes — but in two layers, cheapest first:
@@ -107,6 +107,7 @@ Tests: extend `health-endpoint.test.js` (fields present and numeric; `rooms` goe
 **Sentry project settings:** "Prevent storing of IP addresses" on; data scrubbing defaults on; alert rule: email on new issue + on a regression; check spike protection and set a client key rate limit if the plan offers it.
 
 ## 4. E3 — Uptime monitor
+**Done 2026-09-19 on UptimeRobot's free plan.** The Sentry slot was taken by Nux, and the user won't pay. The trap: a free UptimeRobot **HTTP** monitor always sends **HEAD** (choosing the method is a paid feature), and our server answers HEAD `/health` with the SPA fallback (200). So an HTTP monitor passes as long as anything answers, and a `"ok":true` *tag* on it checks nothing. The working setup is a free **KEYWORD** monitor (id 804033693): it sends GET `/health` and alerts when `"ok":true` is missing. A negative test with an absent keyword turned it Down, and restoring the keyword brought it back Up. Two HTTP (HEAD) monitors also exist: `/` (site responds) and a redundant HEAD `/health`.
 Sentry free includes **1 uptime monitor per organization**. Checked 2026-09-19: the slot is taken by "Nux bot /health" in the shared org. HPR therefore needs an external monitor: UptimeRobot free, which the user signs up for. Point it at `https://huddleplayroom.com/health` (expects 200 + `"ok":true`), 5-minute interval, email alert. If the slot is taken, Cloudflare Health Checks need a paid plan; UptimeRobot's free tier is the fallback.
 
 ## 5. Optional E4 — Cloudflare Web Analytics (SEO/traffic)
