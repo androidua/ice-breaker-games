@@ -85,7 +85,8 @@ export function createClient(wsUrl, name = "client") {
 
 /**
  * Spawn the real game server on `port` and resolve once it logs that it's
- * running. Returns { proc, stop } where stop() force-kills it and waits for exit.
+ * running. Returns { proc, stop, stdout } where stop() force-kills it and waits
+ * for exit, and stdout() returns everything the server has printed so far.
  * `extraEnv` lets a test override server config (e.g. { MAX_ROOMS: "1" }).
  */
 export function startServer(port, extraEnv = {}) {
@@ -95,12 +96,15 @@ export function startServer(port, extraEnv = {}) {
       stdio: ["ignore", "pipe", "pipe"],
     });
     let ready = false;
+    let output = "";
 
     proc.stdout.on("data", (chunk) => {
-      if (!ready && chunk.toString().includes("Game server running")) {
+      output += chunk.toString();
+      if (!ready && output.includes("Game server running")) {
         ready = true;
         resolve({
           proc,
+          stdout: () => output,
           stop() {
             return new Promise((res) => {
               proc.once("exit", () => res());

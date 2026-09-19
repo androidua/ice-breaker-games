@@ -1,6 +1,6 @@
 # Plan E — Logging & error monitoring (structured logs + Sentry)
 
-**Status:** planned, not started. Written 2026-09-19 alongside v1.17.0.
+**Status:** E1 shipped in v1.17.1 (2026-09-19). E2 (Sentry) and E3 (uptime monitor) pending. Written 2026-09-19 alongside v1.17.0.
 **Why:** today nobody finds out when something breaks. Server errors go to `console.error` in Railway logs that nobody watches; a React crash shows "Something went wrong" to the player and is never reported; there is no count of rooms/players, so there is no way to tell "is anyone playing right now?" before a deploy (every deploy wipes live rooms). The v1.17.0 review found a bug (malformed message → socket wedged → player kicked 30s later) that was *invisible* in production for exactly this reason.
 
 **Recommendation:** yes — but in two layers, cheapest first:
@@ -51,6 +51,14 @@ The user's org is `nux-kb` (region `https://us.sentry.io`) with one existing pro
 - No player names in logs (room code + player id only).
 - `/health` gains live gauges: `rooms`, `players`, `sockets`, `rssMB`, and **`eventLoopLagMs` (p50/p99 over the last minute)** via `perf_hooks.monitorEventLoopDelay()` (built in, negligible cost). Event-loop lag is the server-side cause of tick jitter, so it is the best cheap "is the game server healthy" number.
 - Use `/health`'s `rooms`/`players` before deploying: deploy when it reads 0 (every deploy wipes live rooms).
+
+**As built (v1.17.1), with deviations from the sketch above:**
+- Lines use Railway's documented structured-log schema: `message` is the event name and `level` is the severity, not `ev`/`lvl`. Railway only uses `message` as the line text and only reads `level` for severity. There's no `t` field because Railway timestamps every line. Filter with `@level:error`, `@room:SW5R`, or search the event name.
+- Error and abuse events (`message_error`, `game_action_error`, `uncaught_exception`, `unhandled_rejection`, `feedback_*` except `feedback_submitted`) go through `createLimitedLog`: at most 10 lines per event per minute, and the next window's first line carries a `suppressed` count. This stops a flood or a throwing timer from pushing Railway past 500 lines/s, which would drop the lines that matter.
+- Extra events beyond the list above: `server_started` (version, region, node) and `server_shutdown` (rooms/players/sockets at SIGTERM, i.e. how many players a deploy kicked), `feedback_spam` (honeypot / too_fast), `feedback_screenshot_failed`, `feedback_error`.
+- `eventLoopLagMs` is `{p50, p99, max}` in ms. The histogram (20 ms resolution) records the whole sampling interval, so the resolution is subtracted. It reports the last completed minute, or everything since boot during the first minute.
+- Tests: `test/engines/log.test.js`, `test/integration/health-gauges.test.js` (port 9900) and `test/integration/lifecycle-logs.test.js` (port 9901). The lifecycle test fails if the Snake or Bomber loop writes any line, or if a player name reaches stdout. Both guards were mutation-checked.
+- Latency guard (§6), measured locally on 2026-09-19. 2-bot Snake, 60 s per run, 992 frame gaps per run, baseline v1.17.0 vs E1, interleaved: gap mean 120.84–120.87 ms and p99 122.64–122.89 ms on both sides. Loop-lag p99 was 1.63–1.74 ms on both sides. The server wrote 0 lines during the steady window.
 
 Tests: extend `health-endpoint.test.js` (fields present and numeric; `rooms` goes 0 → 1 after a host); a unit test for `log()` output shape. Keep existing `/health` fields unchanged (`ok`, `version`, `region`, `uptime`) — `scripts/verify-deploy.js` and the Railway healthcheck rely on the path returning 200.
 

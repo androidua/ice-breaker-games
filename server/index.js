@@ -3,7 +3,9 @@ import { readFile, readFileSync, existsSync } from "fs";
 import { join, extname, resolve, sep } from "path";
 import { fileURLToPath } from "url";
 import { gzip } from "zlib";
+import { monitorEventLoopDelay } from "perf_hooks";
 import { WebSocketServer } from "ws";
+import { log, logLimited, errorFields } from "./log.js";
 import { createGameState, setSnakeDirection, stepGame } from "./engine.js";
 import { createVotingState, submitVote, tickVoting, allVotesIn, resolveVoting, serializeVoting } from "./voting-engine.js";
 import { createTruthsState, handleTruthsAction, allTruthsVotesIn, revealTruths, nextTruthsRound, tickTruths, serializeTruths } from "./truths-engine.js";
@@ -46,6 +48,32 @@ const HAS_DIST = existsSync(join(DIST_DIR, "index.html"));
 const APP_VERSION = JSON.parse(
   readFileSync(join(__dirname, "..", "package.json"), "utf8")
 ).version;
+
+// ── Event-loop lag (for /health) ─────────────────────────────────
+// A stalled event loop is the server-side cause of tick jitter. Sampling runs on
+// a native libuv timer (no JS per sample). The histogram records each whole
+// sampling interval, so the resolution is subtracted to leave only the delay.
+// /health reports the last completed minute (or everything since boot, before
+// the first minute has passed).
+const LAG_RESOLUTION_MS = 20;
+const loopDelay = monitorEventLoopDelay({ resolution: LAG_RESOLUTION_MS });
+loopDelay.enable();
+let lastLagWindow = null;
+
+function readLoopLag() {
+  if (loopDelay.count === 0) return { p50: 0, p99: 0, max: 0 };
+  const lagMs = (ns) => Math.max(0, Math.round((ns / 1e6 - LAG_RESOLUTION_MS) * 10) / 10);
+  return {
+    p50: lagMs(loopDelay.percentile(50)),
+    p99: lagMs(loopDelay.percentile(99)),
+    max: lagMs(loopDelay.max),
+  };
+}
+
+setInterval(() => {
+  lastLagWindow = readLoopLag();
+  loopDelay.reset();
+}, 60 * 1000).unref();
 
 const MIME_TYPES = {
   ".html": "text/html", ".js": "application/javascript", ".css": "text/css",
@@ -199,7 +227,7 @@ async function uploadScreenshotToLinear(screenshot) {
   });
   const uploadResult = await uploadResp.json();
   if (uploadResult.errors || !uploadResult.data?.fileUpload?.uploadFile) {
-    console.warn("[feedback] fileUpload mutation failed:", uploadResult.errors?.[0]?.message);
+    logLimited("feedback_screenshot_failed", { stage: "fileUpload", err: uploadResult.errors?.[0]?.message }, "warn");
     return null;
   }
 
@@ -211,7 +239,7 @@ async function uploadScreenshotToLinear(screenshot) {
 
   const s3Resp = await fetch(uploadUrl, { method: "PUT", headers: s3Headers, body: buffer });
   if (!s3Resp.ok) {
-    console.warn("[feedback] S3 upload failed:", s3Resp.status);
+    logLimited("feedback_screenshot_failed", { stage: "s3", status: s3Resp.status }, "warn");
     return null;
   }
 
@@ -229,7 +257,7 @@ async function createLinearIssue({ type, name, subject, description, email, scre
       const assetUrl = await uploadScreenshotToLinear(screenshot);
       if (assetUrl) screenshotMarkdown = `\n\n## Screenshot\n\n![Screenshot](${assetUrl})`;
     } catch (err) {
-      console.warn("[feedback] screenshot upload error:", err.message);
+      logLimited("feedback_screenshot_failed", { stage: "upload", ...errorFields(err) }, "warn");
     }
   }
 
@@ -317,6 +345,8 @@ const httpServer = createServer((req, res) => {
   // off Railway (RAILWAY_REPLICA_REGION is injected only on the platform).
   // Answered before the canonical-host redirect: Railway's healthcheck probe
   // sends its own Host header and must get a 200, not a 301.
+  // The live gauges answer "is anyone playing?" before a deploy (a deploy wipes
+  // every in-memory room) and "is the loop healthy?" via event-loop lag.
   if (req.method === "GET" && (urlPath === "/health" || urlPath === "/api/health")) {
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     res.end(JSON.stringify({
@@ -324,6 +354,11 @@ const httpServer = createServer((req, res) => {
       version: APP_VERSION,
       region: process.env.RAILWAY_REPLICA_REGION || null,
       uptime: Math.floor(process.uptime()),
+      rooms: rooms.size,
+      players: countPlayers(),
+      sockets: wss.clients.size,
+      rssMB: Math.round(process.memoryUsage.rss() / (1024 * 1024)),
+      eventLoopLagMs: lastLagWindow || readLoopLag(),
     }));
     return;
   }
@@ -363,6 +398,7 @@ const httpServer = createServer((req, res) => {
 
     const ip = getClientIp(req);
     if (isFeedbackRateLimited(ip)) {
+      logLimited("feedback_rate_limited", {}, "warn"); // never the IP: it's personal data
       res.writeHead(429, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Too many submissions. Please try again later." }));
       return;
@@ -375,10 +411,12 @@ const httpServer = createServer((req, res) => {
         }
         // ── Spam checks (silent fake-success so bots think they won) ──
         if (data.website) {
+          logLimited("feedback_spam", { reason: "honeypot" });
           return "__honeypot__";
         }
         const formAge = Date.now() - (data.openedAt || 0);
         if (!data.openedAt || formAge < 3000) {
+          logLimited("feedback_spam", { reason: "too_fast" });
           return "__too_fast__";
         }
 
@@ -412,6 +450,9 @@ const httpServer = createServer((req, res) => {
           description: description.trim(),
           email: email?.trim() || "",
           screenshot: screenshot || null,
+        }).then((issue) => {
+          log("feedback_submitted", { type, issue: issue?.identifier });
+          return issue;
         });
       })
       .then(() => {
@@ -421,8 +462,8 @@ const httpServer = createServer((req, res) => {
       .catch((err) => {
         const status = err.status || 500;
         const message = status < 500 ? err.message : "Something went wrong.";
-        if (status >= 500) console.error("[feedback] error:", err.message);
-        else if (status === 429) console.warn("[feedback] global cap reached");
+        if (status >= 500) logLimited("feedback_error", { status, ...errorFields(err) }, "error");
+        else if (status === 429) logLimited("feedback_capped", {}, "warn");
         res.writeHead(status, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: message }));
       });
@@ -520,6 +561,8 @@ const wss = new WebSocketServer({
 setInterval(() => {
   wss.clients.forEach((ws) => {
     if (ws.isAlive === false) {
+      // The "silent disconnect": a socket that stopped answering pings.
+      log("heartbeat_terminate", { player: ws.clientId });
       ws.terminate();
       return;
     }
@@ -533,6 +576,7 @@ wss.on("connection", (ws) => {
   ws.on("pong", () => { ws.isAlive = true; });
 
   const clientId = `p${nextClientId++}`;
+  ws.clientId = clientId; // lets the heartbeat log which player it dropped
   ws.send(JSON.stringify({ type: "welcome", id: clientId }));
 
   ws.on("message", (raw) => {
@@ -554,16 +598,20 @@ wss.on("connection", (ws) => {
     try {
       handleMessage(ws, clientId, message);
     } catch (err) {
-      console.error(`[message] ${message.type} error:`, err && err.message);
+      logLimited("message_error", {
+        player: clientId,
+        type: String(message.type).slice(0, 32),
+        ...errorFields(err),
+      }, "error");
       try {
         ws.send(JSON.stringify({ type: "error", message: "Action failed." }));
       } catch { /* socket already closed */ }
     }
   });
 
-  ws.on("close", () => {
+  ws.on("close", (code) => {
     rateLimits.delete(clientId);
-    handleDisconnect(clientId);
+    handleDisconnect(clientId, code);
   });
 });
 
@@ -627,8 +675,13 @@ function handleHost(ws, clientId, name) {
     votingState: null,
     roundWins: new Map(),
     gameWins: new Map(),
+    // Lifetime stats, reported once in the room_closed log line.
+    createdAt: Date.now(),
+    peakPlayers: 1,
+    gamesPlayed: 0,
   };
   rooms.set(code, room);
+  log("room_created", { room: code, player: clientId, rooms: rooms.size });
   sendRoomUpdate(room);
 }
 
@@ -659,6 +712,8 @@ function handleJoin(ws, clientId, code, name) {
 
   room.players.set(clientId, { id: clientId, name: cleanName(name), ws, color: pickColor(room) });
   if (!room.gameWins.has(clientId)) room.gameWins.set(clientId, 0);
+  room.peakPlayers = Math.max(room.peakPlayers, room.players.size);
+  log("player_joined", { room: room.code, player: clientId, players: room.players.size, status: room.status });
   sendRoomUpdate(room);
   if (room.status === "voting") broadcastVotingState(room);
 }
@@ -684,6 +739,16 @@ function handleEndGame(clientId) {
   const room = findRoomByPlayer(clientId);
   if (!room || room.hostId !== clientId) return;
   if (room.status !== "playing") return;
+
+  let roundWins = 0;
+  room.roundWins.forEach((n) => { roundWins += n; });
+  log("game_ended", {
+    room: room.code,
+    game: room.currentGame,
+    round: room.game?.round ?? room.game?.triviaRound ?? null, // snake has no rounds
+    roundWins,
+    durationSec: Math.round((Date.now() - room.gameStartedAt) / 1000),
+  });
 
   // On a tie for the most round wins, every tied leader is a co-champion.
   topWinners(room.roundWins).forEach((id) => {
@@ -767,15 +832,27 @@ function handleSkipPhase(clientId) {
   }
 }
 
-function handleDisconnect(clientId) {
+// `code` is the WebSocket close code: 1000/1001 for a normal leave, 1006 for a
+// socket that dropped without a close frame (network loss, heartbeat terminate).
+function handleDisconnect(clientId, code) {
   const room = findRoomByPlayer(clientId);
   if (!room) return;
 
   room.players.delete(clientId);
+  log("player_left", {
+    room: room.code, player: clientId, code,
+    status: room.status, game: room.currentGame, players: room.players.size,
+  });
 
   if (room.players.size === 0) {
     stopLoop(room);
     rooms.delete(room.code);
+    log("room_closed", {
+      room: room.code,
+      lifetimeSec: Math.round((Date.now() - room.createdAt) / 1000),
+      peakPlayers: room.peakPlayers,
+      gamesPlayed: room.gamesPlayed,
+    });
     return;
   }
 
@@ -1005,6 +1082,9 @@ function startSelectedGame(room, gameName) {
     case "hottake":    startHotTakeGame(room, players); break;
   }
 
+  room.gamesPlayed++;
+  room.gameStartedAt = Date.now();
+  log("game_started", { room: room.code, game: gameName, players: players.length });
   sendRoomUpdate(room);
 }
 
@@ -1089,7 +1169,13 @@ function handleGameAction(ws, clientId, action) {
   } catch (err) {
     // Contain blast radius: a throw here would otherwise kill the entire Node
     // process and every active room, not just this player's session.
-    console.error(`[gameAction] ${room.currentGame} error:`, err && err.message);
+    logLimited("game_action_error", {
+      room: room.code,
+      game: room.currentGame,
+      player: clientId,
+      kind: typeof action.kind === "string" ? action.kind.slice(0, 32) : null,
+      ...errorFields(err),
+    }, "error");
     try {
       ws.send(JSON.stringify({ type: "error", message: "Action failed." }));
     } catch { /* socket already closed */ }
@@ -1587,6 +1673,12 @@ function findRoomByPlayer(playerId) {
   return null;
 }
 
+function countPlayers() {
+  let total = 0;
+  for (const room of rooms.values()) total += room.players.size;
+  return total;
+}
+
 function generateRoomCode() {
   const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -1606,13 +1698,21 @@ httpServer.listen(PORT, () => {
     console.log("No dist/ folder found — run 'npm run build' to enable the built-in web server.");
     console.log("For development, use 'npm run dev' in a separate terminal.");
   }
+  // The plain-text lines above stay: the test harness waits for them.
+  log("server_started", {
+    version: APP_VERSION,
+    port: PORT,
+    region: process.env.RAILWAY_REPLICA_REGION || null,
+    node: process.version,
+  });
 });
 
 // ── Graceful shutdown ────────────────────────────────────────────
 // Railway sends SIGTERM on redeploy. Notify connected players and
 // drain connections instead of severing them mid-game.
 function gracefulShutdown() {
-  console.log("Shutting down gracefully...");
+  // How many players this shutdown (usually a deploy) is about to disconnect.
+  log("server_shutdown", { rooms: rooms.size, players: countPlayers(), sockets: wss.clients.size });
   wss.clients.forEach((ws) => {
     try {
       ws.send(JSON.stringify({ type: "error", message: "Server is restarting — please refresh in a moment." }));
@@ -1630,8 +1730,8 @@ process.on("SIGINT", gracefulShutdown);
 // bug doesn't take every active room down with it. Restart-on-crash is fine
 // in principle, but in-memory state means a restart = total session loss.
 process.on("uncaughtException", (err) => {
-  console.error("[uncaughtException]", err);
+  logLimited("uncaught_exception", errorFields(err), "error");
 });
 process.on("unhandledRejection", (reason) => {
-  console.error("[unhandledRejection]", reason);
+  logLimited("unhandled_rejection", errorFields(reason), "error");
 });
