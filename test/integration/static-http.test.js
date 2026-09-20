@@ -71,6 +71,17 @@ test("127.0.0.1 is treated as a local host, not redirected to production", async
   assert.equal(res.statusCode, 200);
 });
 
+test("an IPv6 loopback Host is local too, not a foreign host", async () => {
+  // "[::1]:3000" split on the first colon is "[", which matched neither the
+  // canonical host nor the local list, so dev over IPv6 bounced to production.
+  for (const host of ["[::1]", "[::1]:3000"]) {
+    const res = await get("/", host);
+    assert.equal(res.statusCode, 200, `${host} was redirected to production`);
+  }
+  // A bracketed host that isn't loopback still redirects.
+  assert.equal((await get("/", "[2001:db8::1]:8080")).statusCode, 301);
+});
+
 test("SEO files are served with their proper content types", async () => {
   assert.match((await get("/robots.txt")).headers["content-type"], /^text\/plain/);
   assert.match((await get("/sitemap.xml")).headers["content-type"], /^application\/xml/);

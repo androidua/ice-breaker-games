@@ -65,3 +65,26 @@ test("with no secret configured, forwarded IPs are trusted as before", async () 
   for (let i = 0; i < 5; i++) seen.push(await post(OPEN_PORT, { "cf-connecting-ip": `10.3.3.${i}` }));
   assert.deepEqual(seen, [400, 400, 400, 400, 400]);
 });
+
+// Railway hands each request to the container from its own internal address, so
+// the socket is no identity at all: keyed on it, every request got its own
+// budget and the limit never fired in production. Two loopback stacks stand in
+// for two proxy addresses here — 127.0.0.1 and ::1 reach the same server with
+// different remoteAddress values.
+test("/health says whether this request reached the origin through the trusted proxy", async () => {
+  const health = (port, headers) => fetch(`http://127.0.0.1:${port}/health`, { headers }).then((r) => r.json());
+
+  const off = await health(OPEN_PORT, {});
+  assert.equal(off.proxied, null, "with no secret configured the flag is not a claim either way");
+
+  const missing = await health(PORT, {});
+  assert.equal(missing.proxied, false, "a request without the edge secret is not trusted");
+
+  const present = await health(PORT, { "x-origin-secret": SECRET });
+  assert.equal(present.proxied, true, "a request carrying the edge secret is trusted");
+
+  // The existing gauges are untouched.
+  assert.equal(present.ok, true);
+  assert.equal(typeof present.version, "string");
+  assert.equal(typeof present.uptime, "number");
+});

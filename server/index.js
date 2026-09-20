@@ -21,6 +21,7 @@ import { createBomberState, handleBomberAction, applyImmediateMove, stepBomber, 
 import { createHotTakeState, handleHotTakeAction, allHotTakeVotesIn, revealHotTake, nextHotTakeRound, tickHotTake, serializeHotTake } from "./hottake-engine.js";
 import { topWinners } from "./scoring.js";
 import { guardedTick } from "./room-loop.js";
+import { createClientIp } from "./client-ip.js";
 
 const PORT = Number(process.env.PORT || process.env.SNAKE_WS_PORT || 3000);
 const SNAKE_TICK_MS = 120;
@@ -104,7 +105,16 @@ const MIME_TYPES = {
 };
 
 const CANONICAL_HOST = "huddleplayroom.com";
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+
+// "example.com:8080" -> "example.com", "[::1]:8080" -> "::1". Splitting on the
+// first colon turns an IPv6 literal into "[", which then looks like a foreign
+// host and gets redirected to the canonical domain.
+function hostnameOf(hostHeader) {
+  const host = (hostHeader || "").trim();
+  if (host.startsWith("[")) return host.slice(1, host.indexOf("]") === -1 ? undefined : host.indexOf("]"));
+  return host.split(":")[0];
+}
 
 // Only Vite's content-hashed /assets/* files may be cached as immutable. Other
 // static files (favicon, icons, share image) keep stable names, so they get a
@@ -154,31 +164,12 @@ function isFeedbackGloballyCapped() {
   return feedbackGlobal.count > FEEDBACK_GLOBAL_MAX;
 }
 
-// Cloudflare sets cf-connecting-ip to the real client address. The first
-// X-Forwarded-For entry is client-supplied (Cloudflare appends after it), so it
-// is only a fallback for requests that did not come through Cloudflare.
-//
-// The origin also answers requests that skip Cloudflare entirely (Railway's
-// edge routes on the Host header), and there both headers are whatever the
-// client typed — so per-IP limits could be sidestepped by rotating them. Set
-// TRUSTED_PROXY_SECRET here and add the same header at the Cloudflare edge:
-// requests without it then fall back to the socket address. Unset = as before.
-const TRUSTED_PROXY_SECRET = process.env.TRUSTED_PROXY_SECRET || "";
-const TRUSTED_PROXY_HEADER = (process.env.TRUSTED_PROXY_HEADER || "x-origin-secret").toLowerCase();
-
-function fromTrustedProxy(req) {
-  if (!TRUSTED_PROXY_SECRET) return true; // nothing configured: legacy behaviour
-  return req.headers[TRUSTED_PROXY_HEADER] === TRUSTED_PROXY_SECRET;
-}
-
-function getClientIp(req) {
-  if (!fromTrustedProxy(req)) return req.socket.remoteAddress;
-  return (
-    req.headers["cf-connecting-ip"] ||
-    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
-    req.socket.remoteAddress
-  );
-}
+// Client identity for the per-IP limits; see server/client-ip.js. Unset
+// TRUSTED_PROXY_SECRET keeps the previous behaviour.
+const getClientIp = createClientIp({
+  secret: process.env.TRUSTED_PROXY_SECRET,
+  header: process.env.TRUSTED_PROXY_HEADER,
+});
 
 // CORS is only needed in dev (Vite on :5173 posts to the server on :3000);
 // production requests are same-origin. Never answer arbitrary sites.
@@ -497,12 +488,16 @@ const httpServer = createServer((req, res) => {
       players: countPlayers(),
       sockets: wss.clients.size,
       rssMB: Math.round(process.memoryUsage.rss() / (1024 * 1024)),
+      // null when TRUSTED_PROXY_SECRET isn't set; otherwise whether *this*
+      // request carried the edge's secret. One curl says whether the Cloudflare
+      // transform rule is really reaching the origin.
+      proxied: getClientIp.configured ? getClientIp.trusted(req) : null,
       eventLoopLagMs: lastLagWindow || readLoopLag(),
     }));
     return;
   }
 
-  const host = (req.headers.host || "").split(":")[0];
+  const host = hostnameOf(req.headers.host);
   if (host && host !== CANONICAL_HOST && !LOCAL_HOSTS.has(host)) {
     res.writeHead(301, { Location: `https://${CANONICAL_HOST}${req.url}` });
     res.end();
