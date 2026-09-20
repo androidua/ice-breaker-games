@@ -32,8 +32,13 @@ export default function TruthsGame({ game, room, me, send }) {
   const isPresenter = me.id === game.presenterId;
   const isHost = room?.hostId === me.id;
   const presenterName = room?.players.find((p) => p.id === game.presenterId)?.name || "Someone";
-  const roundWinnerName = game.roundWinnerId
-    ? room?.players.find((p) => p.id === game.roundWinnerId)?.name
+  // Every player tied on the top gain is credited a round win, so name them
+  // all rather than whichever one happened to be listed first.
+  const roundWinnerIds = game.roundWinnerIds?.length
+    ? game.roundWinnerIds
+    : game.roundWinnerId ? [game.roundWinnerId] : [];
+  const roundWinnerName = roundWinnerIds.length
+    ? roundWinnerIds.map((id) => room?.players.find((p) => p.id === id)?.name ?? "?").join(" & ")
     : null;
 
   const handleSubmit = () => {
@@ -163,7 +168,7 @@ export default function TruthsGame({ game, room, me, send }) {
             ))}
           </div>
           {roundWinnerName && (
-            <div className="status round-winner">Round winner: {roundWinnerName}</div>
+            <div className="status round-winner">Round winner{roundWinnerIds.length > 1 ? "s" : ""}: {roundWinnerName}</div>
           )}
         </div>
       )}

@@ -978,7 +978,7 @@ function handleSkipPhase(clientId) {
   switch (room.currentGame) {
     case "truths":
       if (room.game.status === "submitting") {
-        room.game = nextTruthsRound(room.game, Math.random);
+        room.game = rotateToPresent(room, (g) => nextTruthsRound(g, Math.random), "presenterId");
         broadcastGameState(room);
       } else if (room.game.status === "voting") {
         triggerTruthsReveal(room);
@@ -987,7 +987,7 @@ function handleSkipPhase(clientId) {
     case "emoji":
       if (room.game.status === "composing") {
         stopLoop(room);
-        room.game = nextEmojiRound(room.game, Math.random);
+        room.game = rotateToPresent(room, (g) => nextEmojiRound(g, Math.random), "storytellerId");
         broadcastGameState(room);
         startEmojiComposeTimer(room);
       } else if (room.game.status === "guessing") {
@@ -1056,6 +1056,7 @@ function handleSocketClose(ws, playerId, code) {
   }
   player.connected = false;
   player.disconnectedAt = Date.now();
+  benchFromRealtimeRound(room, playerId);
   // An away host can't start, skip or end anything, and the phases with no
   // timer of their own (lobby, Snake game over, Trivia round_complete) have
   // nothing else to move them on. Lend the role to someone who is here; they
@@ -1232,7 +1233,7 @@ function reconcileDisconnect(room, clientId) {
         // The presenter left before submitting — reassign the presenter (next in
         // queue) and start a fresh submit instead of idling the 60s timer.
         stopLoop(room);
-        room.game = nextTruthsRound(room.game, Math.random);
+        room.game = rotateToPresent(room, (g) => nextTruthsRound(g, Math.random), "presenterId");
         broadcastGameState(room);
         startTruthsTick(room);
       }
@@ -1254,7 +1255,7 @@ function reconcileDisconnect(room, clientId) {
         // The composer left before submitting — reassign the storyteller (next in
         // queue) and start a fresh compose instead of idling the 45s timer.
         stopLoop(room);
-        room.game = nextEmojiRound(room.game, Math.random);
+        room.game = rotateToPresent(room, (g) => nextEmojiRound(g, Math.random), "storytellerId");
         broadcastGameState(room);
         startEmojiComposeTimer(room);
       }
@@ -1313,9 +1314,77 @@ function awardRoundWin(room, winnerId) {
   sendRoomUpdate(room);
 }
 
-function getSnakeRoundWinner(game) {
+// A disconnected Bomber player stops dead — `moving` is false, so the body just
+// stands there for the whole round and keeps counting as a live player. It can
+// therefore outlast everyone actually playing and take the round.
+// reconcileDisconnect already marks the leaver dead for exactly this reason
+// ("instead of counting a phantom"), but it only runs once RESUME_GRACE_MS
+// expires, and a round is far shorter than the grace. Bench them the moment the
+// socket goes: they keep the seat and their scores, and respawn with everyone
+// else next round. Losing a live round you dropped out of is the same rule as
+// dying in it.
+//
+// Snake is deliberately NOT handled here: an away snake keeps its heading and
+// dies on a wall on its own (Plan D, resume.test.js #14), which lets a quick
+// reconnect resume a living snake. It is kept out of the round-win award
+// instead — see getSnakeRoundWinner.
+function benchFromRealtimeRound(room, clientId) {
+  if (room.status !== "playing" || !room.game) return;
+  if (room.currentGame !== "bomber") return;
+  const roster = room.game.players;
+  if (!roster?.has(clientId)) return;
+  roster.set(clientId, { ...roster.get(clientId), alive: false });
+}
+
+// Is this seat occupied by someone actually here? A seat inside its resume
+// grace is still a full member of the engine's frozen roster, so anything that
+// picks a player must ask this rather than trusting the roster alone.
+function isPresent(room, playerId) {
+  const player = room.players.get(playerId);
+  return !!player && player.connected !== false;
+}
+
+function anyonePresent(room) {
+  return Array.from(room.players.values()).some((p) => p.connected !== false);
+}
+
+// Roll a role rotation forward until it lands on someone who is present.
+// reconcileDisconnect would have pruned the absent player, but it only runs
+// after RESUME_GRACE_MS, and a round is usually shorter than the grace — so
+// without this the pencil (or the prompt) goes to an empty chair and the round
+// is unplayable. If nobody at all is present, take the first result unchanged
+// rather than spinning.
+function rotateToPresent(room, advance, roleKey) {
+  let next = advance(room.game);
+  if (!anyonePresent(room)) return next;
+  let guard = room.players.size + 1;
+  while (guard-- > 0 && !isPresent(room, next[roleKey])) {
+    next = advance(next);
+  }
+  return next;
+}
+
+// Games whose round can legitimately be co-won (a shared majority, an equal
+// gain, an identical score) hand us every winner. Credit them all — picking one
+// by Map iteration order gave the round, and with it the End Game "game win"
+// via topWinners(), to whoever simply acted first. One room update for the lot,
+// not one per winner.
+function awardRoundWins(room, winnerIds) {
+  const ids = (winnerIds || []).filter(Boolean);
+  if (ids.length === 0) return;
+  ids.forEach((id) => room.roundWins.set(id, (room.roundWins.get(id) || 0) + 1));
+  sendRoomUpdate(room);
+}
+
+// An away snake keeps drifting until it hits something (Plan D keeps it on the
+// board so a quick reconnect resumes a living snake), which means it can be the
+// last one moving when everyone still playing has already crashed. It may keep
+// the snake; it must not bank the round win for a round nobody was there for.
+function getSnakeRoundWinner(room) {
+  const game = room?.game;
   if (!game?.snakes) return null;
-  const snakes = Array.from(game.snakes.values());
+  const snakes = Array.from(game.snakes.values()).filter((s) => isPresent(room, s.id));
+  if (snakes.length === 0) return null;
   const alive = snakes.filter((s) => s.alive);
   if (alive.length === 1) return alive[0].id;
   const sorted = [...snakes].sort((a, b) => b.score - a.score);
@@ -1537,7 +1606,7 @@ function startSnake(room, players) {
 
     if (room.game.status !== "running") {
       stopLoop(room);
-      awardRoundWin(room, getSnakeRoundWinner(room.game));
+      awardRoundWin(room, getSnakeRoundWinner(room));
       sendRoomUpdate(room);
     }
   });
@@ -1575,7 +1644,7 @@ function startTruthsTick(room) {
     if (room.game.timer <= 0) {
       if (room.game.status === "submitting") {
         stopLoop(room);
-        room.game = nextTruthsRound(room.game, Math.random);
+        room.game = rotateToPresent(room, (g) => nextTruthsRound(g, Math.random), "presenterId");
         broadcastGameState(room);
         startTruthsTick(room);
       } else if (room.game.status === "voting") {
@@ -1599,8 +1668,8 @@ function startTruthsRevealTimer(room) {
     broadcastGameState(room);
     if (room.game.timer <= 0) {
       stopLoop(room);
-      awardRoundWin(room, room.game.roundWinnerId);
-      room.game = nextTruthsRound(room.game, Math.random);
+      awardRoundWins(room, room.game.roundWinnerIds);
+      room.game = rotateToPresent(room, (g) => nextTruthsRound(g, Math.random), "presenterId");
       broadcastGameState(room);
       startTruthsTick(room);
     }
@@ -1645,7 +1714,7 @@ function startEmojiRevealTimer(room) {
     if (room.game.timer <= 0) {
       stopLoop(room);
       awardRoundWin(room, room.game.roundWinnerId);
-      room.game = nextEmojiRound(room.game, Math.random);
+      room.game = rotateToPresent(room, (g) => nextEmojiRound(g, Math.random), "storytellerId");
       broadcastGameState(room);
       startEmojiComposeTimer(room);
     }
@@ -1690,7 +1759,7 @@ function startSketchRevealTimer(room) {
     if (room.game.timer <= 0) {
       stopLoop(room);
       awardRoundWin(room, room.game.roundWinnerId);
-      room.game = nextSketchRound(room.game, Math.random);
+      room.game = rotateToPresent(room, (g) => nextSketchRound(g, Math.random), "drawerId");
       broadcastGameState(room);
       startSketchDrawTimer(room);
     }
@@ -1730,7 +1799,7 @@ function handleTriviaTimerEnd(room) {
     if (room.game.status === "round_complete") {
       // Award win(s) and stop — host must press "Start Next Set" to continue.
       // A top-score tie credits every co-winner (rewards are shared).
-      (room.game.roundWinnerIds || []).forEach((id) => awardRoundWin(room, id));
+      awardRoundWins(room, room.game.roundWinnerIds);
       broadcastGameState(room);
     } else {
       broadcastGameState(room);
@@ -1771,7 +1840,7 @@ function startTyperacerTick(room) {
       triggerTyperacerReveal(room);
     } else if (room.game.status === "reveal" && room.game.timer <= 0) {
       stopLoop(room);
-      awardRoundWin(room, room.game.roundWinnerId);
+      awardRoundWins(room, room.game.roundWinnerIds);
       room.game = nextTyperacerRound(room.game, Math.random);
       broadcastGameState(room);
       startTyperacerTick(room);
@@ -1813,7 +1882,7 @@ function startBomberLoop(room) {
 
     if (room.game.status === "round_end") {
       stopLoop(room);
-      room.game.roundWinnerIds.forEach((id) => awardRoundWin(room, id));
+      awardRoundWins(room, room.game.roundWinnerIds);
       sendRoomUpdate(room);
       broadcastGameState(room);
       // Auto-advance after round end delay (tracked so a host skip can cancel it)
@@ -1850,7 +1919,7 @@ function startHotTakeTick(room) {
       triggerHotTakeReveal(room);
     } else if (room.game.status === "reveal" && room.game.timer <= 0) {
       stopLoop(room);
-      awardRoundWin(room, room.game.roundWinnerId);
+      awardRoundWins(room, room.game.roundWinnerIds);
       room.game = nextHotTakeRound(room.game, Math.random);
       broadcastGameState(room);
       startHotTakeTick(room);

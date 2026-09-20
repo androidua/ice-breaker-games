@@ -28,6 +28,7 @@ export function createTruthsState({ players, rng }) {
     scores,
     round: 1,
     timer: SUBMIT_DURATION,
+    roundWinnerIds: [],
     roundWinnerId: null,
   };
 }
@@ -93,16 +94,29 @@ export function revealTruths(state) {
     }
   });
 
+  // Every player tied on the top gain co-wins the round. A strict `>` scan kept
+  // only the first id the Map happened to reach, so a tie silently went to
+  // whoever voted first. maxGain stays 0-guarded: a round nobody gained from
+  // awards nobody.
   let maxGain = 0;
-  let roundWinnerId = null;
-  gains.forEach((gain, id) => {
-    if (gain > maxGain) {
-      maxGain = gain;
-      roundWinnerId = id;
-    }
+  gains.forEach((gain) => {
+    if (gain > maxGain) maxGain = gain;
   });
+  const roundWinnerIds = [];
+  if (maxGain > 0) {
+    gains.forEach((gain, id) => {
+      if (gain === maxGain) roundWinnerIds.push(id);
+    });
+  }
 
-  return { ...state, status: "reveal", scores, timer: REVEAL_DURATION, roundWinnerId };
+  return {
+    ...state,
+    status: "reveal",
+    scores,
+    timer: REVEAL_DURATION,
+    roundWinnerIds,
+    roundWinnerId: roundWinnerIds[0] || null, // kept for the frontend's single-winner display
+  };
 }
 
 export function nextTruthsRound(state, rng) {
@@ -126,6 +140,7 @@ export function nextTruthsRound(state, rng) {
     votes: new Map(),
     round: state.round + 1,
     timer: SUBMIT_DURATION,
+    roundWinnerIds: [],
     roundWinnerId: null,
   };
 }
@@ -146,6 +161,7 @@ export function serializeTruths(state) {
     scores: Object.fromEntries(state.scores),
     voteCount: state.votes.size,
     voterCount: state.playerIds.filter((id) => id !== state.presenterId).length,
+    roundWinnerIds: state.roundWinnerIds,
     roundWinnerId: state.roundWinnerId,
   };
 

@@ -28,19 +28,35 @@ test("an instant full-paragraph paste cannot finish", () => {
 });
 
 // — guard rails: the fix must stay narrow —
+//
+// These two used to reach the end in ONE update (0 → full paragraph) after
+// winding raceStartTime back. That shortcut is now indistinguishable from the
+// delayed paste that typeracer-paste.test.js exists to block, so they type in
+// realistic increments instead — which is what the React client actually sends
+// (one message per input event). The behaviour being pinned is unchanged.
+const stepInLikeAHuman = (s, target, chars = 4, gapMs = 250) => {
+  let typed = "";
+  while (typed.length < target.length) {
+    typed = target.slice(0, Math.min(typed.length + chars, target.length));
+    s.raceStartTime -= gapMs;
+    const p = s.progress.get("p1");
+    if (p.lastUpdateAt) s.progress.set("p1", { ...p, lastUpdateAt: p.lastUpdateAt - gapMs });
+    s = handleTyperacerAction(s, "p1", { kind: "progress", typed });
+  }
+  return s;
+};
+
 test("legitimate typing still finishes once enough time has elapsed", () => {
   let s = createTyperacerState({ players, rng: identityRng });
-  s.raceStartTime = Date.now() - 60000; // unit tests can't type for real seconds
-  s = handleTyperacerAction(s, "p1", { kind: "progress", typed: s.paragraph });
+  s = stepInLikeAHuman(s, s.paragraph);
   assert.equal(s.progress.get("p1").finished, true, "a full entry after real time must finish");
 });
 
 test("a mistake is penalised but does not block finishing", () => {
   let s = createTyperacerState({ players, rng: identityRng });
-  s.raceStartTime = Date.now() - 60000;
   const full = s.paragraph;
   const withTypo = full.slice(0, 5) + (full[5] === "x" ? "y" : "x") + full.slice(6);
-  s = handleTyperacerAction(s, "p1", { kind: "progress", typed: withTypo });
+  s = stepInLikeAHuman(s, withTypo);
   const p = s.progress.get("p1");
   assert.equal(p.finished, true, "finishing with mistakes is allowed by the game's rules");
   assert.ok(p.mistakes >= 1, "the mistake is still counted for scoring");

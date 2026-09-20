@@ -5,6 +5,10 @@ const REVEAL_DURATION = 6;
 // arrives at t≈0) can't win — its only advantage was finishing instantly.
 // ~20 cps ≈ 240 WPM, comfortably above any real human typist.
 const MAX_CPS = 20;
+// Burst allowance for the rate cap, in characters. Generous enough that an IME
+// commit or an autocorrect replacement is never clipped, far short of a whole
+// paragraph so a single paste can never reach the end.
+const TYPING_BURST_CHARS = 40;
 
 const PARAGRAPHS_RAW = [
   "The astronaut opened the fridge and found a raccoon eating last Tuesday's lasagna. Nobody was surprised. This was the third time this month.",
@@ -166,6 +170,7 @@ export function createTyperacerState({ players, rng }) {
     raceStartTime: Date.now(),
     closingCountdown: null,
     round: 1,
+    roundWinnerIds: [],
     roundWinnerId: null,
     paragraphPool: shuffledParas,
     poolIndex: 1,
@@ -204,15 +209,38 @@ function updateProgress(state, playerId, typed) {
   const current = state.progress.get(playerId);
   if (current.finished) return state;
 
-  const sanitised = String(typed).slice(0, state.paragraph.length + 10);
+  const now = Date.now();
+  const requested = String(typed).slice(0, state.paragraph.length + 10);
+
+  // Rate cap. The min-time gate below only sets a FLOOR on elapsed time, so
+  // waiting paragraph.length / MAX_CPS seconds and then pasting cleared it and
+  // finished with a perfect score (measured: 931 points, beating every honest
+  // typist). Progress may now grow no faster than MAX_CPS chars/sec, with a
+  // small burst allowance so IME/autocorrect insertions are never clipped.
+  // Deliberately content-blind (resolved decision #3): this caps the RATE, so
+  // mistakes still don't block finishing. Shrinking (backspace) is never
+  // capped — only growth is.
+  const prevLen = current.typed.length;
+  const sinceLastMs = now - (current.lastUpdateAt ?? state.raceStartTime);
+  const budget = Math.min(
+    TYPING_BURST_CHARS,
+    (current.typingBudget ?? TYPING_BURST_CHARS) + (sinceLastMs / 1000) * MAX_CPS
+  );
+  const requestedGrowth = Math.max(0, requested.length - prevLen);
+  const allowedGrowth = Math.min(requestedGrowth, Math.floor(budget));
+  const sanitised = requestedGrowth > allowedGrowth
+    ? requested.slice(0, prevLen + allowedGrowth)
+    : requested;
+  const typingBudget = budget - allowedGrowth;
+
   const reachedEnd = sanitised.length >= state.paragraph.length;
   // Anti-cheat: only count as finished if enough wall-clock time has passed for
   // a human to have typed it. A full-paragraph paste reaches length at t≈0 and
   // is therefore rejected; keystrokes are still recorded for partial scoring.
-  const elapsedMs = Date.now() - state.raceStartTime;
+  const elapsedMs = now - state.raceStartTime;
   const minFinishMs = (state.paragraph.length / MAX_CPS) * 1000;
   const finished = reachedEnd && elapsedMs >= minFinishMs;
-  const finishTime = finished ? Date.now() : null;
+  const finishTime = finished ? now : null;
   const mistakes = finished
     ? countMistakes(sanitised.slice(0, state.paragraph.length), state.paragraph)
     : 0;
@@ -224,7 +252,7 @@ function updateProgress(state, playerId, typed) {
   }
 
   const progress = new Map(state.progress);
-  progress.set(playerId, { typed: sanitised, finished, finishTime, mistakes, wpm });
+  progress.set(playerId, { typed: sanitised, finished, finishTime, mistakes, wpm, lastUpdateAt: now, typingBudget });
 
   // Start 20s closing window when the first player finishes
   const wasFirstFinish =
@@ -240,8 +268,8 @@ export function allTyperacerFinished(state) {
 
 export function revealTyperacer(state) {
   const scores = new Map(state.scores);
+  const gained = new Map();
   let topScore = -1;
-  let winnerId = null;
 
   state.progress.forEach((p, playerId) => {
     let points;
@@ -255,13 +283,29 @@ export function revealTyperacer(state) {
       points = Math.min(49, Math.max(0, Math.floor(progress * 400) - currentMistakes * 10));
     }
     scores.set(playerId, (scores.get(playerId) || 0) + points);
-    if (points > topScore) {
-      topScore = points;
-      winnerId = playerId;
-    }
+    gained.set(playerId, points);
+    if (points > topScore) topScore = points;
   });
 
-  return { ...state, status: "reveal", scores, timer: REVEAL_DURATION, roundWinnerId: winnerId, closingCountdown: null };
+  // Every racer on the top score co-wins. A strict `>` scan kept only the first
+  // id the Map reached, so an exact points tie went to whoever happened to be
+  // iterated first. index.js loops over the plural; the singular is display.
+  const roundWinnerIds = [];
+  if (topScore > 0) {
+    gained.forEach((points, playerId) => {
+      if (points === topScore) roundWinnerIds.push(playerId);
+    });
+  }
+
+  return {
+    ...state,
+    status: "reveal",
+    scores,
+    timer: REVEAL_DURATION,
+    roundWinnerIds,
+    roundWinnerId: roundWinnerIds[0] || null,
+    closingCountdown: null,
+  };
 }
 
 export function nextTyperacerRound(state, rng) {
@@ -285,6 +329,7 @@ export function nextTyperacerRound(state, rng) {
     raceStartTime: Date.now(),
     closingCountdown: null,
     round: state.round + 1,
+    roundWinnerIds: [],
     roundWinnerId: null,
     paragraphPool,
     poolIndex: poolIndex + 1,
@@ -321,5 +366,6 @@ export function serializeTyperacer(state) {
     closingCountdown: state.closingCountdown ?? null,
     round: state.round,
     roundWinnerId: state.roundWinnerId,
+    roundWinnerIds: state.roundWinnerIds || [],
   };
 }

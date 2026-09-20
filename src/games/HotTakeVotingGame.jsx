@@ -25,8 +25,13 @@ export default function HotTakeVotingGame({ game, room, me, send }) {
   const hasVoted = selectedVote !== null || myVote === "agree" || myVote === "disagree";
   const isTie = game.roundResult?.majority === "tie";
   const isMajority = !isTie && myVote && myVote === game.roundResult?.majority;
-  const roundWinnerName = game.roundWinnerId
-    ? room?.players.find((p) => p.id === game.roundWinnerId)?.name
+  // Every player tied on the round is credited a round win, so name them all:
+  // showing a single name while the leaderboard moves for several is confusing.
+  const roundWinnerIds = game.roundWinnerIds?.length
+    ? game.roundWinnerIds
+    : game.roundWinnerId ? [game.roundWinnerId] : [];
+  const roundWinnerName = roundWinnerIds.length
+    ? roundWinnerIds.map((id) => room?.players.find((p) => p.id === id)?.name ?? "?").join(" & ")
     : null;
 
   const isHost = room?.hostId === me.id;
@@ -98,7 +103,7 @@ export default function HotTakeVotingGame({ game, room, me, send }) {
                   : "You did not match the majority this round."}
             </div>
             {roundWinnerName && (
-              <div className="status round-winner">Round winner: {roundWinnerName}</div>
+              <div className="status round-winner">Round winner{roundWinnerIds.length > 1 ? "s" : ""}: {roundWinnerName}</div>
             )}
           </>
         )}

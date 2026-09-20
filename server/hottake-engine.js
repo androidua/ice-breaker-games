@@ -287,6 +287,7 @@ export function createHotTakeState({ players, rng }) {
     votes: new Map(),
     scores,
     roundResult: null,
+    roundWinnerIds: [],
     roundWinnerId: null,
   };
 }
@@ -337,6 +338,10 @@ export function revealHotTake(state) {
       disagreeCount,
       awardedPlayerIds,
     },
+    // Every player on the winning side gained a point, so every one of them is
+    // a round winner. index.js loops over the plural; the singular stays for
+    // the frontend's single-winner display.
+    roundWinnerIds: awardedPlayerIds,
     roundWinnerId: awardedPlayerIds[0] || null,
   };
 }
@@ -360,6 +365,7 @@ export function nextHotTakeRound(state, rng) {
     prompt: promptPool[promptIndex],
     votes: new Map(),
     roundResult: null,
+    roundWinnerIds: [],
     roundWinnerId: null,
   };
 }
@@ -386,6 +392,7 @@ export function serializeHotTake(state) {
     votes,
     scores: Object.fromEntries(state.scores),
     roundResult: state.roundResult,
+    roundWinnerIds: state.roundWinnerIds,
     roundWinnerId: state.roundWinnerId,
   };
 }
