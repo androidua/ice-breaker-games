@@ -13,7 +13,7 @@ export default function VotingPhase({ voting, room, me, send }) {
     <main className="voting-stage">
       <div className="voting-header">
         <div className="status">Vote for the next game!</div>
-        <div className={`voting-timer${voting.timer <= 15 ? " timer-urgent" : ""}`}>{voting.timer}s</div>
+        <div translate="no" className={`voting-timer${voting.timer <= 15 ? " timer-urgent" : ""}`}>{voting.timer}s</div>
       </div>
       <div className="game-grid">
         {voting.availableGames.map((game) => {
@@ -28,7 +28,7 @@ export default function VotingPhase({ voting, room, me, send }) {
             >
               <span className="game-card-name">{label}</span>
               <span className="game-card-votes">
-                {votes} {votes === 1 ? "vote" : "votes"}
+                {`${votes} ${votes === 1 ? "vote" : "votes"}`}
               </span>
             </button>
           );
@@ -40,8 +40,8 @@ export default function VotingPhase({ voting, room, me, send }) {
           {sortedByGameWins.map((player) => (
             <div key={player.id} className="player">
               <span className="swatch" style={{ background: player.color }} />
-              <span>{player.name}</span>
-              <span>{room.gameWins?.[player.id] || 0} games won</span>
+              <span translate="no">{player.name}</span>
+              <span>{`${room.gameWins?.[player.id] || 0} games won`}</span>
               {room.hostId === player.id ? <span>★</span> : null}
             </div>
           ))}

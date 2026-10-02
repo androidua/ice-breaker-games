@@ -67,11 +67,11 @@ export default function TruthsGame({ game, room, me, send }) {
   return (
     <main className="game-stage">
       <div className="game-header">
-        <span>Round {game.round}</span>
+        <span>{`Round ${game.round}`}</span>
         <div className="game-header-right">
           <GameInstructions title="Two Truths & a Lie" rules={RULES} />
           {game.timer != null && (
-            <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+            <span translate="no" className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
           )}
         </div>
       </div>
@@ -82,7 +82,7 @@ export default function TruthsGame({ game, room, me, send }) {
           {statements.map((s, i) => (
             <label key={i} className="field">
               <span>
-                Statement {i + 1}
+                {`Statement ${i + 1}`}
                 <button
                   type="button"
                   className={`lie-toggle ${lieIndex === i ? "lie-selected" : ""}`}
@@ -111,7 +111,7 @@ export default function TruthsGame({ game, room, me, send }) {
 
       {game.status === "submitting" && !isPresenter && (
         <div className="panel">
-          <div className="status">{presenterName} is writing their statements...</div>
+          <div className="status">{`${presenterName} is writing their statements...`}</div>
         </div>
       )}
 
@@ -138,7 +138,7 @@ export default function TruthsGame({ game, room, me, send }) {
             ))}
           </div>
           {game.voterCount > 0 && (
-            <div className="status">{game.voteCount}/{game.voterCount} voted</div>
+            <div className="status">{`${game.voteCount}/${game.voterCount} voted`}</div>
           )}
           {isPresenter && (
             <div className="actions">
@@ -168,7 +168,7 @@ export default function TruthsGame({ game, room, me, send }) {
             ))}
           </div>
           {roundWinnerName && (
-            <div className="status round-winner">Round winner{roundWinnerIds.length > 1 ? "s" : ""}: {roundWinnerName}</div>
+            <div className="status round-winner">{`Round winner${roundWinnerIds.length > 1 ? "s" : ""}: ${roundWinnerName}`}</div>
           )}
         </div>
       )}
@@ -202,9 +202,9 @@ function Scoreboard({ game, room }) {
         {sorted.map((p) => (
           <div key={p.id} className="player">
             <span className="swatch" style={{ background: p.color }} />
-            <span>{p.name}</span>
-            <span>{p.score} pts</span>
-            <span>{p.roundWins} {p.roundWins === 1 ? "round" : "rounds"} won</span>
+            <span translate="no">{p.name}</span>
+            <span>{`${p.score} pts`}</span>
+            <span>{`${p.roundWins} ${p.roundWins === 1 ? "round" : "rounds"} won`}</span>
           </div>
         ))}
       </div>

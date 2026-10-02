@@ -81,7 +81,7 @@ export default function SnakeGame({ game, room, me, send }) {
   return (
     <main className="game-stage">
       <div className="game-header">
-        <span>Round {roundNum}</span>
+        <span>{`Round ${roundNum}`}</span>
         <div className="game-header-right">
           <GameInstructions title="Snake Arena" rules={RULES} />
           {roundOver && <span className="voting-timer timer-urgent">Round Over</span>}
@@ -178,9 +178,9 @@ function Scoreboard({ game, room }) {
       {sorted.map((p) => (
         <div key={p.id} className="player">
           <span className="swatch" style={{ background: p.color }} />
-          <span>{p.name}</span>
-          <span>{p.score} pts</span>
-          <span>{p.roundWins} {p.roundWins === 1 ? "round" : "rounds"} won</span>
+          <span translate="no">{p.name}</span>
+          <span>{`${p.score} pts`}</span>
+          <span>{`${p.roundWins} ${p.roundWins === 1 ? "round" : "rounds"} won`}</span>
           {!p.alive && game?.status !== "waiting" ? <span>✕</span> : null}
           {room.hostId === p.id ? <span>★</span> : null}
         </div>

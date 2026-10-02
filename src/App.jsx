@@ -347,7 +347,9 @@ export default function App() {
 
       {awayNames.length > 0 && connection === "open" && resume !== "failed" && (
         <div className="away-notice" role="status">
-          {awayNames.join(", ")} {awayNames.length === 1 ? "is" : "are"} reconnecting…
+          {/* One string: the names change while this is on screen, and
+              auto-translate freezes text React updates node by node. */}
+          {`${awayNames.join(", ")} ${awayNames.length === 1 ? "is" : "are"} reconnecting…`}
         </div>
       )}
 
@@ -362,8 +364,8 @@ export default function App() {
               {room.players.map((player) => (
                 <div key={player.id} className="player">
                   <span className="swatch" style={{ background: player.color }} />
-                  <span>{player.name}</span>
-                  <span>{room.gameWins?.[player.id] || 0} games won</span>
+                  <span translate="no">{player.name}</span>
+                  <span>{`${room.gameWins?.[player.id] || 0} games won`}</span>
                   {room.hostId === player.id ? <span>★</span> : null}
                 </div>
               ))}

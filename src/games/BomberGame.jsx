@@ -228,11 +228,11 @@ export default function BomberGame({ game, room, me, send }) {
   return (
     <main className="game-stage">
       <div className="game-header">
-        <span>Round {round}</span>
+        <span>{`Round ${round}`}</span>
         <div className="game-header-right">
           <GameInstructions title="Bomber Arena" rules={RULES} />
           {timer != null && (
-            <span className={`voting-timer${timer <= 15 ? " timer-urgent" : ""}`}>{timer}s</span>
+            <span translate="no" className={`voting-timer${timer <= 15 ? " timer-urgent" : ""}`}>{timer}s</span>
           )}
         </div>
       </div>
@@ -262,13 +262,13 @@ export default function BomberGame({ game, room, me, send }) {
         <div className="bomber-stats">
           {myPlayer.alive ? (
             <>
-              <span>💣 ×{myPlayer.maxBombs}</span>
-              <span>🔥 ×{myPlayer.flameRange}</span>
+              <span>{`💣 ×${myPlayer.maxBombs}`}</span>
+              <span>{`🔥 ×${myPlayer.flameRange}`}</span>
             </>
           ) : (
             <span style={{ opacity: 0.6 }}>You&apos;re out — watching</span>
           )}
-          <span>Points: {myScore}</span>
+          <span>{`Points: ${myScore}`}</span>
         </div>
       )}
 
@@ -278,7 +278,7 @@ export default function BomberGame({ game, room, me, send }) {
           .map((p) => (
             <div key={p.id} className={`bomber-score-row${p.alive ? "" : " dead"}`}>
               <span className="bomber-score-dot" style={{ background: p.color }} />
-              <span className="bomber-score-name">{p.name}</span>
+              <span className="bomber-score-name" translate="no">{p.name}</span>
               <span className="bomber-score-pts">{scores?.[p.id] ?? 0}</span>
             </div>
           ))}

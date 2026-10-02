@@ -45,11 +45,11 @@ export default function HotTakeVotingGame({ game, room, me, send }) {
   return (
     <main className="game-stage">
       <div className="game-header">
-        <span>Round {game.round}</span>
+        <span>{`Round ${game.round}`}</span>
         <div className="game-header-right">
           <GameInstructions title="Hot Take" rules={RULES} />
           {game.timer != null && (
-            <span className={`voting-timer${game.timer <= 5 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+            <span translate="no" className={`voting-timer${game.timer <= 5 ? " timer-urgent" : ""}`}>{game.timer}s</span>
           )}
         </div>
       </div>
@@ -93,7 +93,7 @@ export default function HotTakeVotingGame({ game, room, me, send }) {
                 : `Majority picked ${game.roundResult.majority}.`}
             </div>
             <div className="status">
-              Agree: {game.roundResult.agreeCount} · Disagree: {game.roundResult.disagreeCount}
+              {`Agree: ${game.roundResult.agreeCount} · Disagree: ${game.roundResult.disagreeCount}`}
             </div>
             <div className="status">
               {isTie
@@ -103,7 +103,7 @@ export default function HotTakeVotingGame({ game, room, me, send }) {
                   : "You did not match the majority this round."}
             </div>
             {roundWinnerName && (
-              <div className="status round-winner">Round winner{roundWinnerIds.length > 1 ? "s" : ""}: {roundWinnerName}</div>
+              <div className="status round-winner">{`Round winner${roundWinnerIds.length > 1 ? "s" : ""}: ${roundWinnerName}`}</div>
             )}
           </>
         )}
@@ -138,9 +138,9 @@ function Scoreboard({ game, room }) {
         {sorted.map((p) => (
           <div key={p.id} className="player">
             <span className="swatch" style={{ background: p.color }} />
-            <span>{p.name}</span>
-            <span>{p.score} pts</span>
-            <span>{p.roundWins} {p.roundWins === 1 ? "round" : "rounds"} won</span>
+            <span translate="no">{p.name}</span>
+            <span>{`${p.score} pts`}</span>
+            <span>{`${p.roundWins} ${p.roundWins === 1 ? "round" : "rounds"} won`}</span>
           </div>
         ))}
       </div>

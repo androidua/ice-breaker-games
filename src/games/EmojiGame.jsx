@@ -501,11 +501,11 @@ export default function EmojiGame({ game, room, me, send }) {
   return (
     <main className="game-stage">
       <div className="game-header">
-        <span>Round {game.round}</span>
+        <span>{`Round ${game.round}`}</span>
         <div className="game-header-right">
           <GameInstructions title="Emoji Storytelling" rules={RULES} />
           {game.timer != null && (
-            <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+            <span translate="no" className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
           )}
         </div>
       </div>
@@ -514,7 +514,7 @@ export default function EmojiGame({ game, room, me, send }) {
         <div className="panel">
           <div className="status">
             Describe with emojis only: <strong>{game.prompt?.text}</strong>
-            {" "}({game.promptCategory})
+            {` (${game.promptCategory})`}
           </div>
 
           <div className="emoji-preview">{emojiInput || "Tap emojis below..."}</div>
@@ -591,7 +591,7 @@ export default function EmojiGame({ game, room, me, send }) {
 
       {game.status === "composing" && !isStoryteller && (
         <div className="panel">
-          <div className="status">{storytellerName} is picking emojis ({game.promptCategory})...</div>
+          <div className="status">{`${storytellerName} is picking emojis (${game.promptCategory})...`}</div>
         </div>
       )}
 
@@ -601,11 +601,12 @@ export default function EmojiGame({ game, room, me, send }) {
           {!isStoryteller && game.triesLeft > 0 && (
             <>
               <div className="status" style={{ fontSize: "0.85em", opacity: 0.75 }}>
-                {game.triesLeft} / {game.guessLimit} {game.triesLeft === 1 ? "try" : "tries"} left
+                {`${game.triesLeft} / ${game.guessLimit} ${game.triesLeft === 1 ? "try" : "tries"} left`}
               </div>
+              {/* The hint and the answer stay in English: guesses are checked against them. */}
               {game.triesLeft === 1 && game.hint && (
                 <div className="status" style={{ fontSize: "0.85em", letterSpacing: "0.1em" }}>
-                  Hint: <strong>{game.hint}</strong>
+                  Hint: <strong translate="no">{game.hint}</strong>
                 </div>
               )}
               <div className="guess-row">
@@ -626,7 +627,7 @@ export default function EmojiGame({ game, room, me, send }) {
           {isStoryteller && (
             <div className="status">Players are guessing...</div>
           )}
-          <div className="guess-feed" ref={guessFeedRef}>
+          <div className="guess-feed" ref={guessFeedRef} translate="no">
             {game.guesses.map((g, i) => (
               <div key={i} className={`guess-item ${g.correct ? "guess-correct" : ""}`}>
                 <strong>{playerName(g.playerId)}:</strong> {g.text}
@@ -640,9 +641,9 @@ export default function EmojiGame({ game, room, me, send }) {
       {game.status === "reveal" && (
         <div className="panel">
           <div className="emoji-display">{game.emojis || "⏰"}</div>
-          <div className="status">The answer was: <strong>{game.answer}</strong></div>
+          <div className="status">The answer was: <strong translate="no">{game.answer}</strong></div>
           {roundWinnerName && (
-            <div className="status round-winner">Round winner: {roundWinnerName}</div>
+            <div className="status round-winner">{`Round winner: ${roundWinnerName}`}</div>
           )}
         </div>
       )}
@@ -676,9 +677,9 @@ function Scoreboard({ game, room }) {
         {sorted.map((p) => (
           <div key={p.id} className="player">
             <span className="swatch" style={{ background: p.color }} />
-            <span>{p.name}</span>
-            <span>{p.score} pts</span>
-            <span>{p.roundWins} {p.roundWins === 1 ? "round" : "rounds"} won</span>
+            <span translate="no">{p.name}</span>
+            <span>{`${p.score} pts`}</span>
+            <span>{`${p.roundWins} ${p.roundWins === 1 ? "round" : "rounds"} won`}</span>
           </div>
         ))}
       </div>

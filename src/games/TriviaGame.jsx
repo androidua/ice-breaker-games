@@ -44,18 +44,21 @@ export default function TriviaGame({ game, room, me, send }) {
         <div className="game-header-right">
           <GameInstructions title="Speed Trivia" rules={RULES} />
           {game.timer != null && (
-            <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+            <span translate="no" className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
           )}
         </div>
       </div>
 
       {game.status === "round_complete" ? (
         <div className="panel trivia-panel">
+          {/* One string, like {game.question} in the other branch: React reuses
+              this div between the two, and removing a translated text node from
+              it was the Sentry HUDDLE-PLAY-ROOM-3 crash on "Start Next Set". */}
           <div className="trivia-question">
-            Set {game.triviaRound} complete — {game.totalQuestions} questions done!
+            {`Set ${game.triviaRound} complete — ${game.totalQuestions} questions done!`}
           </div>
           {roundWinnerName && (
-            <div className="status round-winner">Round winner: {roundWinnerName}</div>
+            <div className="status round-winner">{`Round winner: ${roundWinnerName}`}</div>
           )}
           {isHost ? (
             <div className="actions">
@@ -99,7 +102,7 @@ export default function TriviaGame({ game, room, me, send }) {
           </div>
 
           {game.status === "question" && answered && (
-            <div className="status">Waiting for others... ({game.answerCount}/{game.playerCount})</div>
+            <div className="status">{`Waiting for others... (${game.answerCount}/${game.playerCount})`}</div>
           )}
 
           {game.status === "reveal" && (
@@ -133,9 +136,9 @@ function Scoreboard({ game, room }) {
         {sorted.map((p) => (
           <div key={p.id} className="player">
             <span className="swatch" style={{ background: p.color }} />
-            <span>{p.name}</span>
-            <span>{p.score} pts</span>
-            <span>{p.roundWins} {p.roundWins === 1 ? "round" : "rounds"} won</span>
+            <span translate="no">{p.name}</span>
+            <span>{`${p.score} pts`}</span>
+            <span>{`${p.roundWins} ${p.roundWins === 1 ? "round" : "rounds"} won`}</span>
           </div>
         ))}
       </div>

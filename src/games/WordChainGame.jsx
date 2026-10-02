@@ -39,11 +39,11 @@ export default function WordChainGame({ game, room, me, send }) {
   return (
     <main className="game-stage">
       <div className="game-header">
-        <span>Round {game.round}</span>
+        <span>{`Round ${game.round}`}</span>
         <div className="game-header-right">
           <GameInstructions title="Word Chain" rules={RULES} />
           {game.status === "playing" && (
-            <span className={`voting-timer${game.timer <= 5 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+            <span translate="no" className={`voting-timer${game.timer <= 5 ? " timer-urgent" : ""}`}>{game.timer}s</span>
           )}
         </div>
       </div>
@@ -52,8 +52,10 @@ export default function WordChainGame({ game, room, me, send }) {
         <div className="panel">
           {game.currentWord ? (
             <div className="wordchain-current">
-              <span className="wordchain-word">{game.currentWord}</span>
-              <span className="wordchain-hint"> → must start with <strong>{lastLetter?.toUpperCase()}</strong></span>
+              {/* The chain is checked against English words: translated, the
+                  word would end in a different letter from the one asked for. */}
+              <span className="wordchain-word" translate="no">{game.currentWord}</span>
+              <span className="wordchain-hint"> → must start with <strong translate="no">{lastLetter?.toUpperCase()}</strong></span>
             </div>
           ) : (
             <div className="status">Say any word to start the chain!</div>
@@ -70,12 +72,16 @@ export default function WordChainGame({ game, room, me, send }) {
                   style={{ borderColor: p.color }}
                 >
                   <span className="swatch" style={{ background: p.color }} />
-                  {p.name}
-                  {p.id === game.currentPlayerId && ` (${game.timer}s)`}
+                  {/* One untranslated string: the " (9s)" text node used to be
+                      removed when the turn passed, which crashed translated
+                      pages (Sentry HUDDLE-PLAY-ROOM-4). */}
+                  <span translate="no">
+                    {p.id === game.currentPlayerId ? `${p.name} (${game.timer}s)` : p.name}
+                  </span>
                 </div>
               ))}
             {game.eliminated?.length > 0 && (
-              <div className="wordchain-eliminated-label">Eliminated: {game.eliminated.map(playerName).join(", ")}</div>
+              <div className="wordchain-eliminated-label">{`Eliminated: ${game.eliminated.map(playerName).join(", ")}`}</div>
             )}
           </div>
 
@@ -95,7 +101,7 @@ export default function WordChainGame({ game, room, me, send }) {
           )}
 
           {!isMyTurn && !isEliminated && (
-            <div className="status">{currentPlayerName}'s turn…</div>
+            <div className="status">{`${currentPlayerName}'s turn…`}</div>
           )}
 
           {isEliminated && (
@@ -103,7 +109,7 @@ export default function WordChainGame({ game, room, me, send }) {
           )}
 
           {game.invalidReason === "wrong_letter" && isMyTurn && (
-            <div className="status" style={{ color: "#c0392b" }}>That word doesn't start with "{lastLetter?.toUpperCase()}"!</div>
+            <div className="status" style={{ color: "#c0392b" }}>{`That word doesn't start with "${lastLetter?.toUpperCase()}"!`}</div>
           )}
           {game.invalidReason === "already_used" && isMyTurn && (
             <div className="status" style={{ color: "#c0392b" }}>That word was already used!</div>
@@ -118,14 +124,14 @@ export default function WordChainGame({ game, room, me, send }) {
         <div className="panel">
           {game.roundWinnerId ? (
             <div className="status round-winner">
-              {playerName(game.roundWinnerId)} wins this round!
+              {`${playerName(game.roundWinnerId)} wins this round!`}
             </div>
           ) : (
             <div className="status">Round over — no winner!</div>
           )}
           {game.lastEliminatedId && (
             <div className="status" style={{ opacity: 0.7 }}>
-              {playerName(game.lastEliminatedId)} ran out of time.
+              {`${playerName(game.lastEliminatedId)} ran out of time.`}
             </div>
           )}
           {isHost && (
@@ -165,9 +171,9 @@ function Scoreboard({ game, room }) {
         {sorted.map((p) => (
           <div key={p.id} className="player">
             <span className="swatch" style={{ background: p.color }} />
-            <span>{p.name}</span>
-            <span>{p.score} pts</span>
-            <span>{p.roundWins} {p.roundWins === 1 ? "round" : "rounds"} won</span>
+            <span translate="no">{p.name}</span>
+            <span>{`${p.score} pts`}</span>
+            <span>{`${p.roundWins} ${p.roundWins === 1 ? "round" : "rounds"} won`}</span>
           </div>
         ))}
       </div>

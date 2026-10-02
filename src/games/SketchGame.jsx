@@ -162,33 +162,34 @@ export default function SketchGame({ game, room, me, send }) {
   return (
     <main className="game-stage">
       <div className="game-header">
-        <span>Round {game.round}</span>
+        <span>{`Round ${game.round}`}</span>
         <div className="game-header-right">
           <GameInstructions title="Sketch & Guess" rules={RULES} />
           {game.timer != null && (
-            <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+            <span translate="no" className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
           )}
         </div>
       </div>
 
       {/* Status line — above the grid, full width */}
+      {/* The word stays in English: guesses are checked against it. */}
       {isDrawer && game.status === "drawing" && (
-        <div className="status">Draw: <strong>{game.word}</strong></div>
+        <div className="status">Draw: <strong translate="no">{game.word}</strong></div>
       )}
       {!isDrawer && game.status === "drawing" && (
-        <div className="status">{drawerName} is drawing ({game.wordLength} letters)</div>
+        <div className="status">{`${drawerName} is drawing (${game.wordLength} letters)`}</div>
       )}
       {game.status === "reveal" && (
         <div className="status">
-          The word was: <strong>{game.word}</strong>
-          {roundWinnerName && <span className="round-winner"> — Round winner: {roundWinnerName}</span>}
+          The word was: <strong translate="no">{game.word}</strong>
+          {roundWinnerName && <span className="round-winner">{` — Round winner: ${roundWinnerName}`}</span>}
         </div>
       )}
 
       {/* Countdown after first correct guess */}
       {game.status === "drawing" && game.revealIn != null && (
         <div className="status">
-          Next round in <strong>{game.revealIn}s</strong>
+          Next round in <strong>{`${game.revealIn}s`}</strong>
         </div>
       )}
 
@@ -222,7 +223,9 @@ export default function SketchGame({ game, room, me, send }) {
               <button type="button" onClick={handleGuess} disabled={game.roundWinnerId != null}>Guess</button>
             </div>
           )}
-          <div className="guess-feed">
+          {/* Names and attempts at the English word: translating them would
+              show players guesses nobody typed. */}
+          <div className="guess-feed" translate="no">
             {game.guesses.map((g, i) => (
               <div key={i} className={`guess-item ${g.correct ? "guess-correct" : ""}`}>
                 <strong>{playerName(g.playerId)}:</strong> {g.text}
@@ -277,9 +280,9 @@ function Scoreboard({ game, room }) {
       {sorted.map((p) => (
         <div key={p.id} className="player">
           <span className="swatch" style={{ background: p.color }} />
-          <span>{p.name}</span>
-          <span>{p.score} pts</span>
-          <span>{p.roundWins} {p.roundWins === 1 ? "round" : "rounds"} won</span>
+          <span translate="no">{p.name}</span>
+          <span>{`${p.score} pts`}</span>
+          <span>{`${p.roundWins} ${p.roundWins === 1 ? "round" : "rounds"} won`}</span>
         </div>
       ))}
     </div>

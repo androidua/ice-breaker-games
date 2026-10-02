@@ -163,6 +163,7 @@ Two tiers tracked separately:
 3. Create `src/games/<Game>Game.jsx` receiving `{ game, room, me, send }`
 4. Register the component in `GAME_COMPONENTS` and `GAME_LABELS` in `App.jsx`
 5. Add the game key to the voting options in `voting-engine.js`
+6. Add its main phases to `SCREENS` in `test/engines/translate-safe-render.test.js` (see Browser Translation)
 
 ## Constraints and Limits
 
@@ -217,6 +218,15 @@ The app is designed for phone use. Key patterns to maintain:
 - All inputs use `font-size: 16px` minimum (prevents iOS Safari auto-zoom)
 - Touch controls exist alongside keyboard controls (swipe + on-screen buttons for Snake, finger drawing for Sketch)
 - Touch event handlers use `passive: false` where needed to prevent pull-to-refresh on iOS
+
+## Browser Translation
+
+Players do auto-translate the page (Chrome Translate, Safari). The translator swaps React's text nodes for `<font>` copies, so React removing one threw `NotFoundError` and the error boundary replaced the game (Sentry HUDDLE-PLAY-ROOM-3/-4, Oct 2026: Trivia "Start Next Set", Word Chain turn change), and React updating one changed nothing on screen (frozen timers). Fingerprint in Sentry breadcrumbs: `html.translated-ltr`, clicks on `… > font > font`. Three layers, keep all of them:
+- **Write UI text as one string per element.** ``<span>{`${score} pts`}</span>``, never `<span>{score} pts</span>`, and never conditional text beside other children (`{a}{cond && " (9s)"}`). A sole string child is replaced wholesale by React, which overwrites the translator's copy; separate text nodes go stale or crash. Static text next to an element (`Draw: <strong>…</strong>`) is fine.
+- **`translate="no"` on what must not change language:** player names, countdown timers, and the words a game checks typed input against (Type Racer paragraph, Word Chain word/letter, Sketch word, Emoji hint/answer, guess feeds). Never on whole screens: Trivia questions, Hot Takes and Two Truths statements are what translating players need to read.
+- **`src/dom-guard.js`** (installed in `main.jsx`) makes `removeChild`/`insertBefore` skip a node something else already moved, instead of throwing. It is the net, not the fix: it leaves the translator's stale copy on screen.
+
+`test/engines/translate-safe-render.test.js` renders every game's main phases with `react-dom/server` (via Vite's `ssrLoadModule`, no build or browser) and fails on two adjacent text nodes outside `translate="no"`, on translatable names/timers/game words, and — the positive control — on untranslatable questions and statements. App-shell text that only renders with a live room (lobby list, reconnect notice) isn't reachable there; check it by hand.
 
 ## Testing
 

@@ -40,16 +40,16 @@ export default function TyperacerGame({ game, room, me, send }) {
   return (
     <main className="game-stage">
       <div className="game-header">
-        <span>Round {game.round}</span>
+        <span>{`Round ${game.round}`}</span>
         <div className="game-header-right">
           <GameInstructions title="Type Racer" rules={RULES} />
           {game.closingCountdown != null ? (
-            <span className={`voting-timer${game.closingCountdown <= 5 ? " timer-urgent" : ""}`}>
+            <span translate="no" className={`voting-timer${game.closingCountdown <= 5 ? " timer-urgent" : ""}`}>
               {game.closingCountdown}s
             </span>
           ) : (
             game.timer != null && (
-              <span className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
+              <span translate="no" className={`voting-timer${game.timer <= 15 ? " timer-urgent" : ""}`}>{game.timer}s</span>
             )
           )}
         </div>
@@ -63,10 +63,11 @@ export default function TyperacerGame({ game, room, me, send }) {
               finishedPlayers.length === 1
                 ? `${finishedPlayers[0].name} finished!`
                 : `${finishedPlayers.length} players finished!`;
-            return <div className="status">{label} {game.closingCountdown}s left</div>;
+            return <div className="status">{`${label} ${game.closingCountdown}s left`}</div>;
           })()}
-          {/* Paragraph display with per-character colouring */}
-          <div className="typeracer-text" onClick={() => inputRef.current?.focus()}>
+          {/* Paragraph display with per-character colouring. Never translated:
+              players must type this exact English text. */}
+          <div className="typeracer-text" translate="no" onClick={() => inputRef.current?.focus()}>
             {paragraph.split("").map((char, i) => {
               let cls = "char-pending";
               if (i < typed.length) {
@@ -109,7 +110,7 @@ export default function TyperacerGame({ game, room, me, send }) {
               const pct = paragraph.length > 0 ? Math.min(100, (prog.typedLength / paragraph.length) * 100) : 0;
               return (
                 <div key={p.id} className="typeracer-progress-row">
-                  <span className="typeracer-progress-name">{p.name}</span>
+                  <span className="typeracer-progress-name" translate="no">{p.name}</span>
                   <div className="typeracer-progress-bar">
                     <div
                       className="typeracer-progress-fill"
@@ -143,18 +144,18 @@ export default function TyperacerGame({ game, room, me, send }) {
               .map((p) => (
                 <div key={p.id} className="typeracer-result-row">
                   <span className="swatch" style={{ background: p.color }} />
-                  <span className="typeracer-result-name">{p.name}</span>
+                  <span className="typeracer-result-name" translate="no">{p.name}</span>
                   {p.finished ? (
                     <>
-                      <span>{p.wpm} wpm</span>
-                      <span>{p.mistakes} mistake{p.mistakes !== 1 ? "s" : ""}</span>
+                      <span>{`${p.wpm} wpm`}</span>
+                      <span>{`${p.mistakes} mistake${p.mistakes !== 1 ? "s" : ""}`}</span>
                     </>
                   ) : (
                     <span style={{ opacity: 0.5 }}>
-                      {Math.round(((game.progress?.[p.id]?.typedLength || 0) / (game.paragraph?.length || 1)) * 100)}% done
+                      {`${Math.round(((game.progress?.[p.id]?.typedLength || 0) / (game.paragraph?.length || 1)) * 100)}% done`}
                     </span>
                   )}
-                  <span><strong>{p.score} pts</strong></span>
+                  <span><strong>{`${p.score} pts`}</strong></span>
                 </div>
               ))}
           </div>
@@ -190,9 +191,9 @@ function Scoreboard({ game, room }) {
         {sorted.map((p) => (
           <div key={p.id} className="player">
             <span className="swatch" style={{ background: p.color }} />
-            <span>{p.name}</span>
-            <span>{p.score} pts</span>
-            <span>{p.roundWins} {p.roundWins === 1 ? "round" : "rounds"} won</span>
+            <span translate="no">{p.name}</span>
+            <span>{`${p.score} pts`}</span>
+            <span>{`${p.roundWins} ${p.roundWins === 1 ? "round" : "rounds"} won`}</span>
           </div>
         ))}
       </div>
