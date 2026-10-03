@@ -27,6 +27,17 @@ export default function TruthsGame({ game, room, me, send }) {
   const [statements, setStatements] = useState(["", "", ""]);
   const [lieIndex, setLieIndex] = useState(0);
 
+  // Each player sees statements in their own unique order.
+  // displayOrder is e.g. [2, 0, 1] meaning: display slot 0 shows original[2], etc.
+  // This hook must stay above the `!game` return below: the room message that
+  // mounts this component arrives before the first state message, so the first
+  // render has no game. A hook below that return makes the second render call
+  // more hooks than the first and React throws (Sentry HUDDLE-PLAY-ROOM-5).
+  const displayOrder = useMemo(
+    () => seededShuffle([0, 1, 2], me.id + String(game?.round)),
+    [me.id, game?.round]
+  );
+
   if (!game) return null;
 
   const isPresenter = me.id === game.presenterId;
@@ -48,13 +59,6 @@ export default function TruthsGame({ game, room, me, send }) {
       action: { kind: "submitStatements", statements, lieIndex },
     });
   };
-
-  // Each player sees statements in their own unique order.
-  // displayOrder is e.g. [2, 0, 1] meaning: display slot 0 shows original[2], etc.
-  const displayOrder = useMemo(
-    () => seededShuffle([0, 1, 2], me.id + String(game.round)),
-    [me.id, game.round]
-  );
 
   // Map a display-position vote back to the original index before sending to server.
   const handleVote = (displayIdx) => {

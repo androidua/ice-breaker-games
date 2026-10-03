@@ -63,9 +63,15 @@ class ErrorBoundary extends Component {
   componentDidCatch(error, info) { reportError(error, { componentStack: info?.componentStack }); }
   render() {
     if (this.state.hasError) {
+      // A render error is often a one-off (the game state arrives a moment
+      // after the screen mounts), so offer a retry that keeps the page, the
+      // socket and the seat. Without it the only way out was a reload.
       return (
         <div className="error-boundary">
-          Something went wrong. Please refresh the page.
+          <div>{"Something went wrong. Try again, or refresh the page if it keeps happening."}</div>
+          <div className="actions">
+            <button type="button" onClick={() => this.setState({ hasError: false })}>Try again</button>
+          </div>
         </div>
       );
     }

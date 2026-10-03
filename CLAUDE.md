@@ -119,6 +119,7 @@ Each game has a **pure engine module** (no side effects, no timers, no WebSocket
 - `Lobby.jsx` handles host/join UI before a room exists.
 - `VotingPhase.jsx` renders the game selection voting screen.
 - `src/games/` has one component per game. Each receives `{ game, room, me, send }` as props.
+- **`game` is `null` on a game component's first render.** The server sends `room` (status `playing`) and `state` as two messages, and `App.jsx` mounts the component on the first. **Call every hook above the `if (!game) return null` guard** (`game?.round`, never `game.round`, in a hook's body or deps). A hook below it made the second render call more hooks than the first and React threw "Rendered more hooks than during the previous render" (Sentry HUDDLE-PLAY-ROOM-5, 2026-10-03, `TruthsGame`'s `useMemo`). `test/engines/hooks-order.test.js` reads every file in `src/` and fails on a hook below an early return or inside a condition or loop; it can't be done by rendering, since `react-dom/server` renders once. `SnakeGame` relies on the null render (it draws its board with `game?.`), so don't gate mounting on `game` in `App.jsx`. The game `ErrorBoundary` has a "Try again" button that clears the error without a reload.
 
 ### WebSocket Protocol
 
